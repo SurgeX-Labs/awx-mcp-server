@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  awx-mcp-server:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    container_name: awx-mcp-server
+    ports:
+      - "8000:8000"
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8000
+      - LOG_LEVEL=info
+      - ENABLE_METRICS=true
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-admin-secret-token}
+    volumes:
+      - awx-mcp-data:/home/awxmcp/.config/awx-mcp
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - awx-mcp-network
+
+  # Optional: Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: awx-mcp-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - awx-mcp-network
+    depends_on:
+      - awx-mcp-server
+
+  # Optional: Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: awx-mcp-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - awx-mcp-network
+    depends_on:
+      - prometheus
+
+volumes:
+  awx-mcp-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  awx-mcp-network:
+    driver: bridge

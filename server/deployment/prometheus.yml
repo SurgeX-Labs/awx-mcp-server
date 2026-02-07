@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'awx-mcp-server'
+    static_configs:
+      - targets: ['awx-mcp-server:8000']
+    metrics_path: '/prometheus-metrics'

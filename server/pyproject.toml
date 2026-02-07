@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=65.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "awx-mcp-server"
+version = "1.0.0"
+description = "Remote AWX MCP Server with FastAPI"
+requires-python = ">=3.10"
+authors = [
+    {name = "AWX MCP Team"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+keywords = ["awx", "ansible", "mcp", "automation", "fastapi"]
+
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "python-multipart>=0.0.6",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+    "prometheus-client>=0.19.0",
+    "structlog>=24.1.0",
+    "httpx>=0.27.0",
+    "tenacity>=8.2.0",
+    "pydantic>=2.0.0",
+    "awxkit>=23.0.0",
+    "mcp>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "httpx>=0.27.0",
+]
+kubernetes = [
+    "kubernetes>=28.1.0",
+]
+
+[project.scripts]
+awx-mcp-server = "awx_mcp_server.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --cov=awx_mcp_server"

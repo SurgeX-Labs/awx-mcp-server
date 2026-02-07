@@ -1,0 +1,19 @@
+# Node modules
+node_modules/
+*.log
+npm-debug.log*
+
+# VS Code extension build
+out/
+*.vsix
+.vscode-test/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~

@@ -1,0 +1,184 @@
+{{- if .Values.taskPods.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "awx-mcp-server.fullname" . }}-task-script
+  labels:
+    {{- include "awx-mcp-server.labels" . | nindent 4 }}
+data:
+  task-script.py: |
+    #!/usr/bin/env python3
+    """Task pod script for executing AWX operations."""
+    
+    import asyncio
+    import json
+    import os
+    import sys
+    
+    async def execute_task():
+        """Execute AWX task."""
+        # Get task parameters from environment
+        task_type = os.environ.get('TASK_TYPE')
+        task_params = json.loads(os.environ.get('TASK_PARAMS', '{}'))
+        tenant_id = os.environ.get('TENANT_ID')
+        
+        # Import AWX client
+        from awx_mcp_shared.storage import ConfigManager, CredentialStore
+        from awx_mcp_shared.clients import CompositeAWXClient
+        from awx_mcp_shared.domain import CredentialType
+        
+        # Get client
+        config_manager = ConfigManager(tenant_id=tenant_id)
+        credential_store = CredentialStore(tenant_id=tenant_id)
+        
+        env = config_manager.get_active()
+        
+        try:
+            username, secret = credential_store.get_credential(env.env_id, CredentialType.PASSWORD)
+            is_token = False
+        except:
+            username, secret = credential_store.get_credential(env.env_id, CredentialType.TOKEN)
+            is_token = True
+        
+        client = CompositeAWXClient(env, username, secret, is_token)
+        
+        # Execute task based on type
+        result = None
+        
+        if task_type == "job_launch":
+            result = await client.launch_job(
+                task_params.get("template_name"),
+                task_params.get("extra_vars")
+            )
+            result = {"id": result.id, "name": result.name, "status": result.status}
+        
+        elif task_type == "job_get":
+            result = await client.get_job(task_params.get("job_id"))
+            result = {
+                "id": result.id,
+                "name": result.name,
+                "status": result.status,
+                "started": str(result.started) if result.started else None,
+                "finished": str(result.finished) if result.finished else None,
+                "elapsed": result.elapsed
+            }
+        
+        elif task_type == "job_cancel":
+            await client.cancel_job(task_params.get("job_id"))
+            result = {"success": True, "message": f"Job {task_params.get('job_id')} canceled"}
+        
+        elif task_type == "job_stdout":
+            output = await client.get_job_stdout(task_params.get("job_id"))
+            result = {"job_id": task_params.get("job_id"), "output": output}
+        
+        elif task_type == "job_events":
+            events = await client.get_job_events(
+                task_params.get("job_id"),
+                task_params.get("page", 1),
+                task_params.get("page_size", 50)
+            )
+            result = {
+                "events": [
+                    {"event": e.event, "task": e.task, "role": e.role, "stdout": e.stdout}
+                    for e in events
+                ]
+            }
+        
+        elif task_type == "list_job_templates":
+            templates = await client.list_job_templates(
+                name_filter=task_params.get("filter"),
+                page=task_params.get("page", 1),
+                page_size=task_params.get("page_size", 25)
+            )
+            result = {
+                "templates": [
+                    {"id": t.id, "name": t.name, "description": t.description}
+                    for t in templates
+                ]
+            }
+        
+        elif task_type == "list_projects":
+            projects = await client.list_projects(
+                page=task_params.get("page", 1),
+                page_size=task_params.get("page_size", 25)
+            )
+            result = {
+                "projects": [
+                    {"id": p.id, "name": p.name, "scm_type": p.scm_type, "scm_url": p.scm_url}
+                    for p in projects
+                ]
+            }
+        
+        elif task_type == "list_inventories":
+            inventories = await client.list_inventories(
+                page=task_params.get("page", 1),
+                page_size=task_params.get("page_size", 25)
+            )
+            result = {
+                "inventories": [
+                    {"id": i.id, "name": i.name, "description": i.description}
+                    for i in inventories
+                ]
+            }
+        
+        elif task_type == "project_update":
+            await client.update_project(task_params.get("name"))
+            result = {"success": True, "message": f"Project '{task_params.get('name')}' update initiated"}
+        
+        elif task_type == "test_connection":
+            success = await client.test_connection()
+            result = {"success": success, "message": "Connection successful" if success else "Connection failed"}
+        
+        else:
+            result = {"error": f"Unknown task type: {task_type}"}
+        
+        # Write result to output
+        print(json.dumps(result))
+        sys.stdout.flush()
+        
+        return result
+    
+    if __name__ == "__main__":
+        try:
+            result = asyncio.run(execute_task())
+            sys.exit(0 if result else 1)
+        except Exception as e:
+            print(json.dumps({"error": str(e)}))
+            sys.exit(1)
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "awx-mcp-server.fullname" . }}-task-runner
+  labels:
+    {{- include "awx-mcp-server.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "awx-mcp-server.fullname" . }}-task-runner
+  labels:
+    {{- include "awx-mcp-server.labels" . | nindent 4 }}
+rules:
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["create", "get", "list", "watch", "delete"]
+- apiGroups: [""]
+  resources: ["pods", "pods/log"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "awx-mcp-server.fullname" . }}-task-runner
+  labels:
+    {{- include "awx-mcp-server.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "awx-mcp-server.fullname" . }}-task-runner
+subjects:
+- kind: ServiceAccount
+  name: {{ include "awx-mcp-server.fullname" . }}-task-runner
+  namespace: {{ .Release.Namespace }}
+{{- end }}

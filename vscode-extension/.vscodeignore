@@ -1,0 +1,61 @@
+# Build outputs
+src/**
+**/*.ts
+**/*.map
+.vscode/**
+.vscode-test/**
+node_modules/**/.bin/**
+
+# Development files
+tsconfig.json
+.eslintrc.json
+.gitignore
+*.vsix
+
+# Documentation (keep README.md and CHANGELOG.md)
+docs/**
+
+# Tests
+test/**
+tests/**
+**/*.test.ts
+**/*.test.js
+
+# CI/CD
+.github/**
+.gitlab-ci.yml
+azure-pipelines.yml
+
+# Python cache
+**/__pycache__/**
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+**/*.so
+
+# Pytest
+.pytest_cache/**
+.coverage
+htmlcov/**
+
+# Development only
+bundled/awx-mcp-server/src/**/__pycache__/**
+bundled/awx-mcp-server/.pytest_cache/**
+bundled/awx-mcp-server/test/**
+bundled/awx-mcp-server/tests/**
+bundled/awx-mcp-server/build/**
+
+# Keep these essential files
+!out/**
+!bundled/**
+!bundled/awx-mcp-server/libs/**
+!bundled/awx-mcp-server/dist/**
+!bundled/awx-mcp-server/src/**
+!resources/**
+!README.md
+!CHANGELOG.md
+!LICENSE
+
+# Editor settings
+.vscode/**
