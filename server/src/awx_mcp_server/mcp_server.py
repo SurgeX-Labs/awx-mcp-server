@@ -114,6 +114,96 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                 },
             },
         ),
+        # System Info
+        Tool(
+            name="awx_system_info",
+            description="Get AWX system information (config, dashboard, settings)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "info_type": {
+                        "type": "string",
+                        "description": "Type of info: config, dashboard, settings, me",
+                        "enum": ["config", "dashboard", "settings", "me"],
+                    },
+                },
+                "required": ["info_type"],
+            },
+        ),
+        # Organizations
+        Tool(
+            name="awx_organizations_list",
+            description="List AWX organizations",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "filter": {"type": "string", "description": "Filter organizations by name"},
+                    "page": {"type": "number", "description": "Page number (default: 1)"},
+                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
+                },
+            },
+        ),
+        Tool(
+            name="awx_organization_get",
+            description="Get AWX organization by ID",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "org_id": {"type": "number", "description": "Organization ID"},
+                },
+                "required": ["org_id"],
+            },
+        ),
+        # Credentials
+        Tool(
+            name="awx_credentials_list",
+            description="List AWX credentials",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "filter": {"type": "string", "description": "Filter credentials by name"},
+                    "page": {"type": "number", "description": "Page number (default: 1)"},
+                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
+                },
+            },
+        ),
+        Tool(
+            name="awx_credential_types_list",
+            description="List AWX credential types",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "page": {"type": "number", "description": "Page number (default: 1)"},
+                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
+                },
+            },
+        ),
+        Tool(
+            name="awx_credential_create",
+            description="Create AWX credential",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Credential name"},
+                    "credential_type": {"type": "number", "description": "Credential type ID"},
+                    "organization": {"type": "number", "description": "Organization ID"},
+                    "inputs": {"type": "object", "description": "Credential inputs (e.g., username, password)"},
+                    "description": {"type": "string", "description": "Credential description"},
+                },
+                "required": ["name", "credential_type", "organization", "inputs"],
+            },
+        ),
+        Tool(
+            name="awx_credential_delete",
+            description="Delete AWX credential",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "credential_id": {"type": "number", "description": "Credential ID"},
+                },
+                "required": ["credential_id"],
+            },
+        ),
         # Discovery
         Tool(
             name="awx_templates_list",
@@ -125,6 +215,35 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     "page": {"type": "number", "description": "Page number (default: 1)"},
                     "page_size": {"type": "number", "description": "Page size (default: 25)"},
                 },
+            },
+        ),
+        Tool(
+            name="awx_template_create",
+            description="Create AWX job template",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Template name"},
+                    "inventory": {"type": "number", "description": "Inventory ID"},
+                    "project": {"type": "number", "description": "Project ID"},
+                    "playbook": {"type": "string", "description": "Playbook filename"},
+                    "job_type": {"type": "string", "description": "Job type (run or check)", "enum": ["run", "check"]},
+                    "description": {"type": "string", "description": "Template description"},
+                    "extra_vars": {"type": "object", "description": "Extra variables"},
+                    "limit": {"type": "string", "description": "Host limit pattern"},
+                },
+                "required": ["name", "inventory", "project", "playbook"],
+            },
+        ),
+        Tool(
+            name="awx_template_delete",
+            description="Delete AWX job template",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Template ID"},
+                },
+                "required": ["template_id"],
             },
         ),
         Tool(
@@ -140,6 +259,33 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
             },
         ),
         Tool(
+            name="awx_project_create",
+            description="Create AWX project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Project name"},
+                    "organization": {"type": "number", "description": "Organization ID"},
+                    "scm_type": {"type": "string", "description": "SCM type (git, svn, etc.)", "enum": ["git", "svn", "insights", "archive", ""]},
+                    "scm_url": {"type": "string", "description": "SCM repository URL"},
+                    "scm_branch": {"type": "string", "description": "SCM branch/tag/commit"},
+                    "description": {"type": "string", "description": "Project description"},
+                },
+                "required": ["name", "organization"],
+            },
+        ),
+        Tool(
+            name="awx_project_delete",
+            description="Delete AWX project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "number", "description": "Project ID"},
+                },
+                "required": ["project_id"],
+            },
+        ),
+        Tool(
             name="awx_inventories_list",
             description="List AWX inventories",
             inputSchema={
@@ -149,6 +295,107 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     "page": {"type": "number", "description": "Page number (default: 1)"},
                     "page_size": {"type": "number", "description": "Page size (default: 25)"},
                 },
+            },
+        ),
+        Tool(
+            name="awx_inventory_create",
+            description="Create AWX inventory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Inventory name"},
+                    "organization": {"type": "number", "description": "Organization ID"},
+                    "description": {"type": "string", "description": "Inventory description"},
+                    "variables": {"type": "object", "description": "Inventory variables"},
+                },
+                "required": ["name", "organization"],
+            },
+        ),
+        Tool(
+            name="awx_inventory_delete",
+            description="Delete AWX inventory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "inventory_id": {"type": "number", "description": "Inventory ID"},
+                },
+                "required": ["inventory_id"],
+            },
+        ),
+        Tool(
+            name="awx_inventory_groups_list",
+            description="List groups in AWX inventory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "inventory_id": {"type": "number", "description": "Inventory ID"},
+                    "page": {"type": "number", "description": "Page number (default: 1)"},
+                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
+                },
+                "required": ["inventory_id"],
+            },
+        ),
+        Tool(
+            name="awx_inventory_group_create",
+            description="Create group in AWX inventory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "inventory_id": {"type": "number", "description": "Inventory ID"},
+                    "name": {"type": "string", "description": "Group name"},
+                    "description": {"type": "string", "description": "Group description"},
+                    "variables": {"type": "object", "description": "Group variables"},
+                },
+                "required": ["inventory_id", "name"],
+            },
+        ),
+        Tool(
+            name="awx_inventory_group_delete",
+            description="Delete group from AWX inventory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "group_id": {"type": "number", "description": "Group ID"},
+                },
+                "required": ["group_id"],
+            },
+        ),
+        Tool(
+            name="awx_inventory_hosts_list",
+            description="List hosts in AWX inventory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "inventory_id": {"type": "number", "description": "Inventory ID"},
+                    "page": {"type": "number", "description": "Page number (default: 1)"},
+                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
+                },
+                "required": ["inventory_id"],
+            },
+        ),
+        Tool(
+            name="awx_inventory_host_create",
+            description="Create host in AWX inventory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "inventory_id": {"type": "number", "description": "Inventory ID"},
+                    "name": {"type": "string", "description": "Host name"},
+                    "description": {"type": "string", "description": "Host description"},
+                    "variables": {"type": "object", "description": "Host variables"},
+                },
+                "required": ["inventory_id", "name"],
+            },
+        ),
+        Tool(
+            name="awx_inventory_host_delete",
+            description="Delete host from AWX inventory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "host_id": {"type": "number", "description": "Host ID"},
+                },
+                "required": ["host_id"],
             },
         ),
         Tool(
@@ -214,6 +461,17 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
         Tool(
             name="awx_job_cancel",
             description="Cancel a running AWX job",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "job_id": {"type": "number", "description": "Job ID"},
+                },
+                "required": ["job_id"],
+            },
+        ),
+        Tool(
+            name="awx_job_delete",
+            description="Delete an AWX job",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -329,6 +587,319 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     return [TextContent(type="text", text=f"✓ Connection successful to {env.name}")]
                 else:
                     return [TextContent(type="text", text=f"✗ Connection failed to {env.name}")]
+            
+            # System Info
+            elif name == "awx_system_info":
+                env, client = get_active_client()
+                info_type = arguments["info_type"]
+                
+                async with client:
+                    if info_type == "config":
+                        data = await client.rest_client.get_config()
+                        result = "AWX System Configuration:\n\n"
+                        for key, value in data.items():
+                            result += f"{key}: {value}\n"
+                    elif info_type == "dashboard":
+                        data = await client.rest_client.get_dashboard()
+                        result = "AWX Dashboard:\n\n"
+                        for key, value in data.items():
+                            result += f"{key}: {value}\n"
+                    elif info_type == "settings":
+                        data = await client.rest_client.get_settings()
+                        result = "AWX Settings:\n\n"
+                        for key, value in data.items():
+                            result += f"{key}: {value}\n"
+                    elif info_type == "me":
+                        data = await client.rest_client.get_me()
+                        result = "Current User Info:\n\n"
+                        result += f"ID: {data.get('id')}\n"
+                        result += f"Username: {data.get('username')}\n"
+                        result += f"Email: {data.get('email', 'N/A')}\n"
+                        result += f"First Name: {data.get('first_name', 'N/A')}\n"
+                        result += f"Last Name: {data.get('last_name', 'N/A')}\n"
+                        result += f"Is Superuser: {data.get('is_superuser', False)}\n"
+                    
+                return [TextContent(type="text", text=result)]
+            
+            # Organizations
+            elif name == "awx_organizations_list":
+                env, client = get_active_client()
+                async with client:
+                    orgs = await client.rest_client.list_organizations(
+                        name_filter=arguments.get("filter"),
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 25),
+                    )
+                
+                result = f"Organizations ({len(orgs)}):\n\n"
+                for org in orgs:
+                    result += f"ID: {org['id']} - {org['name']}\n"
+                    if org.get('description'):
+                        result += f"  Description: {org['description']}\n"
+                    result += "\n"
+                
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "awx_organization_get":
+                env, client = get_active_client()
+                org_id = arguments["org_id"]
+                
+                async with client:
+                    org = await client.rest_client.get_organization(org_id)
+                
+                result = f"Organization {org_id}:\n\n"
+                result += f"Name: {org['name']}\n"
+                if org.get('description'):
+                    result += f"Description: {org['description']}\n"
+                result += f"ID: {org['id']}\n"
+                
+                return [TextContent(type="text", text=result)]
+            
+            # Credentials
+            elif name == "awx_credentials_list":
+                env, client = get_active_client()
+                async with client:
+                    creds = await client.rest_client.list_credentials(
+                        name_filter=arguments.get("filter"),
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 25),
+                    )
+                
+                result = f"Credentials ({len(creds)}):\n\n"
+                for cred in creds:
+                    result += f"ID: {cred['id']} - {cred['name']}\n"
+                    if cred.get('description'):
+                        result += f"  Description: {cred['description']}\n"
+                    result += f"  Type: {cred.get('credential_type')}\n"
+                    result += "\n"
+                
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "awx_credential_types_list":
+                env, client = get_active_client()
+                async with client:
+                    types = await client.rest_client.list_credential_types(
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 25),
+                    )
+                
+                result = f"Credential Types ({len(types)}):\n\n"
+                for ctype in types:
+                    result += f"ID: {ctype['id']} - {ctype['name']}\n"
+                    if ctype.get('description'):
+                        result += f"  Description: {ctype['description']}\n"
+                    result += "\n"
+                
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "awx_credential_create":
+                env, client = get_active_client()
+                async with client:
+                    cred = await client.rest_client.create_credential(
+                        name=arguments["name"],
+                        credential_type=arguments["credential_type"],
+                        organization=arguments["organization"],
+                        inputs=arguments["inputs"],
+                        description=arguments.get("description", ""),
+                    )
+                
+                result = f"✓ Credential created successfully\n\n"
+                result += f"ID: {cred['id']}\n"
+                result += f"Name: {cred['name']}\n"
+                
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "awx_credential_delete":
+                env, client = get_active_client()
+                cred_id = arguments["credential_id"]
+                
+                async with client:
+                    await client.rest_client.delete_credential(cred_id)
+                
+                return [TextContent(type="text", text=f"Credential {cred_id} deleted successfully")]
+            
+            # Templates CRUD
+            elif name == "awx_template_create":
+                env, client = get_active_client()
+                async with client:
+                    template = await client.rest_client.create_job_template(
+                        name=arguments["name"],
+                        inventory=arguments["inventory"],
+                        project=arguments["project"],
+                        playbook=arguments["playbook"],
+                        job_type=arguments.get("job_type", "run"),
+                        description=arguments.get("description", ""),
+                        extra_vars=arguments.get("extra_vars"),
+                        limit=arguments.get("limit"),
+                    )
+                
+                result = f"✓ Job template created successfully\n\n"
+                result += f"ID: {template.id}\n"
+                result += f"Name: {template.name}\n"
+                result += f"Playbook: {template.playbook}\n"
+                
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "awx_template_delete":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+                
+                async with client:
+                    await client.rest_client.delete_job_template(template_id)
+                
+                return [TextContent(type="text", text=f"Job template {template_id} deleted successfully")]
+            
+            # Projects CRUD
+            elif name == "awx_project_create":
+                env, client = get_active_client()
+                async with client:
+                    project = await client.rest_client.create_project(
+                        name=arguments["name"],
+                        organization=arguments["organization"],
+                        scm_type=arguments.get("scm_type", "git"),
+                        scm_url=arguments.get("scm_url"),
+                        scm_branch=arguments.get("scm_branch", "main"),
+                        description=arguments.get("description", ""),
+                    )
+                
+                result = f"✓ Project created successfully\n\n"
+                result += f"ID: {project.id}\n"
+                result += f"Name: {project.name}\n"
+                if project.scm_url:
+                    result += f"SCM: {project.scm_url}\n"
+                
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "awx_project_delete":
+                env, client = get_active_client()
+                project_id = arguments["project_id"]
+                
+                async with client:
+                    await client.rest_client.delete_project(project_id)
+                
+                return [TextContent(type="text", text=f"Project {project_id} deleted successfully")]
+            
+            # Inventories CRUD
+            elif name == "awx_inventory_create":
+                env, client = get_active_client()
+                async with client:
+                    inventory = await client.rest_client.create_inventory(
+                        name=arguments["name"],
+                        organization=arguments["organization"],
+                        description=arguments.get("description", ""),
+                        variables=arguments.get("variables"),
+                    )
+                
+                result = f"✓ Inventory created successfully\n\n"
+                result += f"ID: {inventory.id}\n"
+                result += f"Name: {inventory.name}\n"
+                
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "awx_inventory_delete":
+                env, client = get_active_client()
+                inventory_id = arguments["inventory_id"]
+                
+                async with client:
+                    await client.rest_client.delete_inventory(inventory_id)
+                
+                return [TextContent(type="text", text=f"Inventory {inventory_id} deleted successfully")]
+            
+            # Inventory Groups
+            elif name == "awx_inventory_groups_list":
+                env, client = get_active_client()
+                inventory_id = arguments["inventory_id"]
+                
+                async with client:
+                    groups = await client.rest_client.list_inventory_groups(
+                        inventory_id=inventory_id,
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 25),
+                    )
+                
+                result = f"Inventory {inventory_id} Groups ({len(groups)}):\n\n"
+                for group in groups:
+                    result += f"ID: {group['id']} - {group['name']}\n"
+                    if group.get('description'):
+                        result += f"  Description: {group['description']}\n"
+                    result += "\n"
+                
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "awx_inventory_group_create":
+                env, client = get_active_client()
+                inventory_id = arguments["inventory_id"]
+                
+                async with client:
+                    group = await client.rest_client.create_inventory_group(
+                        inventory_id=inventory_id,
+                        name=arguments["name"],
+                        description=arguments.get("description", ""),
+                        variables=arguments.get("variables"),
+                    )
+                
+                result = f"✓ Group created successfully\n\n"
+                result += f"ID: {group['id']}\n"
+                result += f"Name: {group['name']}\n"
+                
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "awx_inventory_group_delete":
+                env, client = get_active_client()
+                group_id = arguments["group_id"]
+                
+                async with client:
+                    await client.rest_client.delete_inventory_group(group_id)
+                
+                return [TextContent(type="text", text=f"Group {group_id} deleted successfully")]
+            
+            # Inventory Hosts
+            elif name == "awx_inventory_hosts_list":
+                env, client = get_active_client()
+                inventory_id = arguments["inventory_id"]
+                
+                async with client:
+                    hosts = await client.rest_client.list_inventory_hosts(
+                        inventory_id=inventory_id,
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 25),
+                    )
+                
+                result = f"Inventory {inventory_id} Hosts ({len(hosts)}):\n\n"
+                for host in hosts:
+                    result += f"ID: {host['id']} - {host['name']}\n"
+                    if host.get('description'):
+                        result += f"  Description: {host['description']}\n"
+                    result += "\n"
+                
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "awx_inventory_host_create":
+                env, client = get_active_client()
+                inventory_id = arguments["inventory_id"]
+                
+                async with client:
+                    host = await client.rest_client.create_inventory_host(
+                        inventory_id=inventory_id,
+                        name=arguments["name"],
+                        description=arguments.get("description", ""),
+                        variables=arguments.get("variables"),
+                    )
+                
+                result = f"✓ Host created successfully\n\n"
+                result += f"ID: {host['id']}\n"
+                result += f"Name: {host['name']}\n"
+                
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "awx_inventory_host_delete":
+                env, client = get_active_client()
+                host_id = arguments["host_id"]
+                
+                async with client:
+                    await client.rest_client.delete_inventory_host(host_id)
+                
+                return [TextContent(type="text", text=f"Host {host_id} deleted successfully")]
             
             elif name == "awx_templates_list":
                 env, client = get_active_client()
@@ -489,6 +1060,15 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     result_data = await client.cancel_job(job_id)
                 
                 return [TextContent(type="text", text=f"Job {job_id} cancellation requested")]
+            
+            elif name == "awx_job_delete":
+                env, client = get_active_client()
+                job_id = arguments["job_id"]
+                
+                async with client:
+                    await client.delete_job(job_id)
+                
+                return [TextContent(type="text", text=f"Job {job_id} deleted successfully")]
             
             elif name == "awx_job_stdout":
                 env, client = get_active_client()

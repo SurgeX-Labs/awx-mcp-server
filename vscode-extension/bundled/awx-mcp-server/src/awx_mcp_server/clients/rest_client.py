@@ -89,7 +89,7 @@ class RestAWXClient(AWXClient):
                     return {}
         return {}
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
     async def _request(
         self, method: str, endpoint: str, **kwargs: Any
     ) -> dict[str, Any]:
@@ -109,6 +109,9 @@ class RestAWXClient(AWXClient):
             AWXConnectionError: Connection failed
             AWXClientError: Other client errors
         """
+        from awx_mcp_server.utils import get_logger
+        logger = get_logger(__name__)
+        
         try:
             response = await self.client.request(method, endpoint, **kwargs)
             
@@ -116,6 +119,15 @@ class RestAWXClient(AWXClient):
                 raise AWXAuthenticationError("Authentication failed")
             elif response.status_code == 403:
                 raise AWXAuthenticationError("Permission denied")
+            elif response.status_code == 404:
+                error_detail = response.text
+                try:
+                    error_json = response.json()
+                    error_detail = error_json.get("detail", error_detail)
+                except Exception:
+                    pass
+                logger.error(f"AWX API 404 on {endpoint}: {error_detail}")
+                raise AWXClientError(f"Endpoint not found: {endpoint} - {error_detail}")
             elif response.status_code >= 400:
                 error_detail = response.text
                 try:
@@ -123,16 +135,20 @@ class RestAWXClient(AWXClient):
                     error_detail = error_json.get("detail", error_detail)
                 except Exception:
                     pass
+                logger.error(f"AWX API error {response.status_code} on {endpoint}: {error_detail}")
                 raise AWXClientError(f"API error {response.status_code}: {error_detail}")
             
             return response.json()
         except httpx.ConnectError as e:
+            logger.error(f"Connection error to {endpoint}: {e}")
             raise AWXConnectionError(f"Failed to connect to AWX: {e}")
         except httpx.TimeoutException as e:
+            logger.error(f"Timeout on {endpoint}: {e}")
             raise AWXConnectionError(f"Request timeout: {e}")
         except (AWXAuthenticationError, AWXConnectionError, AWXClientError):
             raise
         except Exception as e:
+            logger.error(f"Unexpected error on {endpoint}: {e}")
             raise AWXClientError(f"Request failed: {e}")
 
     async def test_connection(self) -> bool:
@@ -295,6 +311,7 @@ class RestAWXClient(AWXClient):
         self,
         status: Optional[str] = None,
         created_after: Optional[str] = None,
+        job_template_id: Optional[int] = None,
         page: int = 1,
         page_size: int = 25,
     ) -> list[Job]:
@@ -304,6 +321,8 @@ class RestAWXClient(AWXClient):
             params["status"] = status
         if created_after:
             params["created__gt"] = created_after
+        if job_template_id:
+            params["job_template"] = job_template_id
         
         data = await self._request("GET", "/api/v2/jobs/", params=params)
         
@@ -316,20 +335,97 @@ class RestAWXClient(AWXClient):
     async def get_job_stdout(
         self, job_id: int, format: str = "txt", tail_lines: Optional[int] = None
     ) -> str:
-        """Get job stdout."""
+        """Get job stdout with fallback to job events.
+        
+        Per AWX API docs: GET /api/v2/jobs/{id}/stdout/
+        Format options: api, html, txt, ansi, json, txt_download, ansi_download
+        """
+        import json
+        from awx_mcp_server.utils import get_logger
+        logger = get_logger(__name__)
+        
         params = {"format": format}
+        endpoint = f"/api/v2/jobs/{job_id}/stdout/"
         
-        data = await self._request(
-            "GET", f"/api/v2/jobs/{job_id}/stdout/", params=params
-        )
-        
-        content = data.get("content", "")
-        
-        if tail_lines and content:
-            lines = content.split("\n")
-            content = "\n".join(lines[-tail_lines:])
-        
-        return content
+        try:
+            # Make direct HTTP request without retry logic to get clear errors
+            response = await self.client.request("GET", endpoint, params=params)
+            
+            # Read response body ONCE as text (never call .json() directly on response)
+            response_text = response.text
+            content_type = response.headers.get("content-type", "").lower()
+            status_code = response.status_code
+            
+            logger.debug(f"Job {job_id} stdout response: status={status_code}, content-type={content_type}, body_length={len(response_text)}")
+            
+            if status_code == 404:
+                # Stdout endpoint not available, try fallback to job events
+                logger.info(f"Job {job_id} stdout endpoint returned 404, trying job events fallback")
+                try:
+                    events = await self.get_job_events(job_id, failed_only=False, page=1, page_size=1000)
+                    output_lines = []
+                    for event in events:
+                        if event.stdout:
+                            output_lines.append(event.stdout)
+                    content = "\n".join(output_lines)
+                    if not content:
+                        raise AWXClientError(f"Job {job_id} has no output available (no stdout or job events)")
+                    return content
+                except Exception as fallback_error:
+                    raise AWXClientError(
+                        f"Job {job_id} stdout endpoint unavailable (404) and job events fallback failed: {fallback_error}"
+                    )
+            elif status_code == 403:
+                raise AWXAuthenticationError(f"Permission denied to access job {job_id} stdout")
+            elif status_code >= 400:
+                # Try to parse error message from response
+                error_detail = response_text
+                try:
+                    error_json = json.loads(response_text)
+                    error_detail = error_json.get("detail", response_text)
+                except Exception:
+                    # Not JSON, use raw text
+                    pass
+                raise AWXClientError(f"Failed to get job {job_id} stdout (HTTP {status_code}): {error_detail}")
+            
+            # Success response (2xx) - parse the body
+            content = ""
+            
+            # Try to parse as JSON if Content-Type indicates JSON
+            if "application/json" in content_type:
+                try:
+                    data = json.loads(response_text)
+                    if isinstance(data, dict):
+                        content = data.get("content", "")
+                    else:
+                        content = str(data)
+                    logger.debug(f"Successfully parsed JSON response for job {job_id}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse JSON response for job {job_id} despite Content-Type={content_type}: {e}")
+                    logger.debug(f"Response body preview: {response_text[:200]}")
+                    # Fall back to plain text
+                    content = response_text
+            else:
+                # Plain text response (text/plain, text/html, or other)
+                content = response_text
+                logger.debug(f"Using plain text response for job {job_id} (length: {len(content)})")
+            
+            if tail_lines and content:
+                lines = content.split("\n")
+                content = "\n".join(lines[-tail_lines:])
+            
+            return content
+            
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error fetching job {job_id} stdout: {e}")
+            raise AWXConnectionError(f"Network error fetching job {job_id} output: {e}")
+        except (AWXAuthenticationError, AWXConnectionError, AWXClientError):
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error fetching job {job_id} stdout: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise AWXClientError(f"Unexpected error fetching job {job_id} output: {e}")
 
     async def get_job_events(
         self, job_id: int, failed_only: bool = False, page: int = 1, page_size: int = 100
@@ -376,6 +472,15 @@ class RestAWXClient(AWXClient):
             except Exception:
                 pass
         
+        # Parse extra_vars - handle both dict and string formats
+        extra_vars = data.get("extra_vars", {})
+        if isinstance(extra_vars, str):
+            try:
+                import json
+                extra_vars = json.loads(extra_vars) if extra_vars else {}
+            except (json.JSONDecodeError, ValueError):
+                extra_vars = {}
+        
         return Job(
             id=data["id"],
             name=data["name"],
@@ -384,7 +489,7 @@ class RestAWXClient(AWXClient):
             inventory=data.get("inventory"),
             project=data.get("project"),
             playbook=data.get("playbook", ""),
-            extra_vars=data.get("extra_vars", {}),
+            extra_vars=extra_vars,
             started=started,
             finished=finished,
             elapsed=data.get("elapsed"),

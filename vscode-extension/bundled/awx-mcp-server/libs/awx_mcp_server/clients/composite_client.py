@@ -143,6 +143,7 @@ class CompositeAWXClient(AWXClient):
         self,
         status: Optional[str] = None,
         created_after: Optional[str] = None,
+        job_template_id: Optional[int] = None,
         page: int = 1,
         page_size: int = 25,
     ) -> list[Job]:
@@ -152,7 +153,7 @@ class CompositeAWXClient(AWXClient):
                 return await self.cli_client.list_jobs(status, created_after, page, page_size)
             except Exception:
                 pass
-        return await self.rest_client.list_jobs(status, created_after, page, page_size)
+        return await self.rest_client.list_jobs(status, created_after, job_template_id, page, page_size)
 
     async def cancel_job(self, job_id: int) -> dict[str, Any]:
         """Cancel job - prefer CLI."""

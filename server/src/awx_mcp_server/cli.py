@@ -82,7 +82,7 @@ def env_list():
     
     active = config_manager.get_active()
     for e in envs:
-        table.add_row(e.name, e.url, "✓" if e.env_id == active.env_id else "")
+        table.add_row(e.name, str(e.base_url), "✓" if e.env_id == active.env_id else "")
     
     console.print(table)
 

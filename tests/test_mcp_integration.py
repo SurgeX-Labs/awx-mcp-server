@@ -361,14 +361,14 @@ class TestMCPServerIntegration:
     
     async def test_create_mcp_server(self):
         """Test MCP server can be created."""
-        from awx_mcp.server import create_mcp_server
+        from awx_mcp_server.mcp_server import create_mcp_server
         
         server = create_mcp_server()
         assert server is not None, "Server should be created"
     
     async def test_mcp_server_with_tenant(self):
         """Test MCP server creation with tenant isolation."""
-        from awx_mcp.server import create_mcp_server
+        from awx_mcp_server.mcp_server import create_mcp_server
         
         server = create_mcp_server(tenant_id="test-tenant")
         assert server is not None, "Server should be created with tenant"

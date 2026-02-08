@@ -1,0 +1,423 @@
+{
+  "name": "awx-mcp-extension",
+  "displayName": "AWX MCP Integration",
+  "description": "Integrate AWX/Ansible Tower with GitHub Copilot through Model Context Protocol (MCP)",
+  "version": "1.0.0",
+  "publisher": "awx-mcp-team",
+  "galleryBanner": {
+    "color": "#EE0000",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "awx",
+    "ansible",
+    "tower",
+    "mcp",
+    "github-copilot",
+    "automation",
+    "model-context-protocol",
+    "infrastructure",
+    "devops"
+  ],
+  "badges": [
+    {
+      "url": "https://img.shields.io/badge/MCP-Compatible-blue",
+      "href": "https://modelcontextprotocol.io",
+      "description": "Model Context Protocol Compatible"
+    }
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "awx-mcp.servers",
+        "label": "AWX MCP Servers"
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "awx-mcp.awx",
+        "name": "awx",
+        "description": "AWX/Ansible Tower automation assistant - manages job templates, inventories, projects, and more",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "templates",
+            "description": "List job templates"
+          },
+          {
+            "name": "inventories",
+            "description": "List inventories"
+          },
+          {
+            "name": "projects",
+            "description": "List projects"
+          },
+          {
+            "name": "jobs",
+            "description": "Show recent jobs"
+          },
+          {
+            "name": "credentials",
+            "description": "List credentials"
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "awx-mcp.start",
+        "title": "Start AWX MCP Server",
+        "category": "AWX MCP",
+        "icon": "$(play)"
+      },
+      {
+        "command": "awx-mcp.stop",
+        "title": "Stop AWX MCP Server",
+        "category": "AWX MCP",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "awx-mcp.restart",
+        "title": "Restart AWX MCP Server",
+        "category": "AWX MCP",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "awx-mcp.status",
+        "title": "Show AWX MCP Server Status",
+        "category": "AWX MCP",
+        "icon": "$(info)"
+      },
+      {
+        "command": "awx-mcp.configureCopilot",
+        "title": "Configure for Copilot Chat",
+        "category": "AWX MCP",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "awx-mcp.setupDependencies",
+        "title": "Setup Python Dependencies",
+        "category": "AWX MCP",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "awx-mcp.addInstance",
+        "title": "Add AWX Instance",
+        "category": "AWX MCP",
+        "icon": "$(add)"
+      },
+      {
+        "command": "awx-mcp.editInstance",
+        "title": "Edit AWX Instance",
+        "category": "AWX MCP",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "awx-mcp.removeInstance",
+        "title": "Remove AWX Instance",
+        "category": "AWX MCP",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "awx-mcp.testConnection",
+        "title": "Test Connection",
+        "category": "AWX MCP",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "awx-mcp.testAuthentication",
+        "title": "Test Authentication",
+        "category": "AWX MCP",
+        "icon": "$(key)"
+      },
+      {
+        "command": "awx-mcp.setDefaultInstance",
+        "title": "Set as Default",
+        "category": "AWX MCP",
+        "icon": "$(star-full)"
+      },
+      {
+        "command": "awx-mcp.listJobTemplates",
+        "title": "List Job Templates",
+        "category": "AWX MCP",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "awx-mcp.refreshInstances",
+        "title": "Refresh Instances",
+        "category": "AWX MCP",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "awx-mcp.viewLogs",
+        "title": "View AWX MCP Logs",
+        "category": "AWX MCP",
+        "icon": "$(output)"
+      },
+      {
+        "command": "awx-mcp.viewMetrics",
+        "title": "View AWX MCP Metrics",
+        "category": "AWX MCP",
+        "icon": "$(graph)"
+      }
+    ],
+    "configuration": {
+      "title": "AWX MCP",
+      "properties": {
+        "awx-mcp.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Path to Python interpreter (will auto-detect if not specified)",
+          "order": 1
+        },
+        "awx-mcp.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to AWX MCP server installation (leave empty for auto-detection)",
+          "order": 2
+        },
+        "awx-mcp.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start MCP server when VS Code opens",
+          "order": 3
+        },
+        "awx-mcp.logLevel": {
+          "type": "string",
+          "default": "info",
+          "enum": ["debug", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Show all debug information",
+            "Show info, warnings, and errors",
+            "Show warnings and errors only",
+            "Show errors only"
+          ],
+          "description": "Log level for MCP server",
+          "order": 4
+        },
+        "awx-mcp.enableMonitoring": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable monitoring and metrics collection",
+          "order": 5
+        },
+        "awx-mcp.serverTimeout": {
+          "type": "number",
+          "default": 30,
+          "minimum": 5,
+          "maximum": 300,
+          "description": "Timeout for server operations (seconds)",
+          "order": 6
+        },
+        "awx-mcp.connectionTimeout": {
+          "type": "number",
+          "default": 10,
+          "minimum": 3,
+          "maximum": 60,
+          "description": "Timeout for AWX API connections (seconds)",
+          "order": 7
+        },
+        "awx-mcp.autoRefreshStatus": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh connection status every 30 seconds",
+          "order": 8
+        },
+        "awx-mcp.showNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show notifications for important events",
+          "order": 9
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "awx-mcp-explorer",
+          "title": "AWX MCP",
+          "icon": "resources/awx-mcp.svg"
+        }
+      ]
+    },
+    "views": {
+      "awx-mcp-explorer": [
+        {
+          "id": "awx-mcp-instances",
+          "name": "AWX Instances",
+          "icon": "$(server)",
+          "contextualTitle": "AWX MCP - Instances"
+        },
+        {
+          "id": "awx-mcp-connection-status",
+          "name": "Connection Status",
+          "icon": "$(plug)",
+          "contextualTitle": "AWX MCP - Status"
+        },
+        {
+          "id": "awx-mcp-metrics",
+          "name": "Server Metrics",
+          "icon": "$(graph)",
+          "contextualTitle": "AWX MCP - Metrics"
+        },
+        {
+          "id": "awx-mcp-logs",
+          "name": "Server Logs",
+          "icon": "$(output)",
+          "contextualTitle": "AWX MCP - Logs"
+        }
+      ]
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "awx-mcp.start"
+        },
+        {
+          "command": "awx-mcp.stop"
+        },
+        {
+          "command": "awx-mcp.restart"
+        },
+        {
+          "command": "awx-mcp.status"
+        },
+        {
+          "command": "awx-mcp.addInstance"
+        },
+        {
+          "command": "awx-mcp.editInstance",
+          "when": "false"
+        },
+        {
+          "command": "awx-mcp.removeInstance",
+          "when": "false"
+        },
+        {
+          "command": "awx-mcp.testConnection",
+          "when": "false"
+        },
+        {
+          "command": "awx-mcp.testAuthentication",
+          "when": "false"
+        },
+        {
+          "command": "awx-mcp.setDefaultInstance",
+          "when": "false"
+        },
+        {
+          "command": "awx-mcp.refreshInstances"
+        },
+        {
+          "command": "awx-mcp.viewLogs"
+        },
+        {
+          "command": "awx-mcp.viewMetrics"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "awx-mcp.addInstance",
+          "when": "view == awx-mcp-instances",
+          "group": "navigation"
+        },
+        {
+          "command": "awx-mcp.refreshInstances",
+          "when": "view == awx-mcp-instances",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "awx-mcp.testConnection",
+          "when": "view == awx-mcp-instances && viewItem == awx-instance",
+          "group": "inline@1"
+        },
+        {
+          "command": "awx-mcp.testAuthentication",
+          "when": "view == awx-mcp-instances && viewItem == awx-instance",
+          "group": "1_test@1"
+        },
+        {
+          "command": "awx-mcp.listJobTemplates",
+          "when": "view == awx-mcp-instances && viewItem == awx-instance",
+          "group": "1_test@2"
+        },
+        {
+          "command": "awx-mcp.testAuthentication",
+          "when": "view == awx-mcp-connection-status && viewItem == instance-status",
+          "group": "inline@1"
+        },
+        {
+          "command": "awx-mcp.editInstance",
+          "when": "view == awx-mcp-instances && viewItem == awx-instance",
+          "group": "2_manage@1"
+        },
+        {
+          "command": "awx-mcp.setDefaultInstance",
+          "when": "view == awx-mcp-instances && viewItem == awx-instance",
+          "group": "2_manage@2"
+        },
+        {
+          "command": "awx-mcp.removeInstance",
+          "when": "view == awx-mcp-instances && viewItem == awx-instance",
+          "group": "3_danger@1"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "prebuild": "npm run compile",
+    "build": "npm run compile && npm run copy-bundled",
+    "copy-bundled": "echo Bundled package already in place",
+    "package": "npm run build && vsce package --out dist/",
+    "publish": "vsce publish",
+    "install-extension": "code --install-extension dist/awx-mcp-extension-1.0.0.vsix"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.56.0",
+    "glob": "^10.3.10",
+    "mocha": "^10.2.0",
+    "typescript": "^5.3.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/awx-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/awx-mcp/issues"
+  },
+  "homepage": "https://github.com/your-org/awx-mcp#readme",
+  "license": "MIT",
+  "qna": "marketplace",
+  "pricing": "Free"
+}

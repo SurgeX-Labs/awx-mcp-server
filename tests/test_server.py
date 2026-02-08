@@ -1,7 +1,7 @@
 """Quick test of MCP server functionality."""
 import asyncio
 import sys
-from awx_mcp.server import create_mcp_server
+from awx_mcp_server.mcp_server import create_mcp_server
 
 async def test_server():
     """Test basic server functionality."""

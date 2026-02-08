@@ -320,7 +320,7 @@ def create_app(mcp_server: Server) -> FastAPI:
         
         return {
             "environments": [
-                {"id": e.env_id, "name": e.name, "url": e.url}
+                {"id": e.env_id, "name": e.name, "url": str(e.base_url)}
                 for e in envs
             ]
         }
@@ -338,7 +338,7 @@ def create_app(mcp_server: Server) -> FastAPI:
             "environment": {
                 "id": env.env_id,
                 "name": env.name,
-                "url": env.url
+                "url": str(env.base_url)
             }
         }
 
