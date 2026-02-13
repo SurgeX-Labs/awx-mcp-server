@@ -1,268 +1,59 @@
 {
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.SurgeX-Labs/awx-mcp-server",
   "displayName": "AWX MCP Server",
-  "description": "Control AWX/Ansible Tower through the Model Context Protocol. Manage infrastructure automation with natural language.",
-  "version": "1.1.0",
+  "description": "Control AWX/Ansible Tower through the Model Context Protocol. Manage infrastructure automation with natural language - 49 tools for jobs, templates, inventories, and local playbook development.",
   "icon": "icon.png",
-  "author": {
-    "name": "SurgeX Labs",
-    "email": "support@surgexlabs.com",
-    "url": "https://github.com/SurgeX-Labs"
-  },
-  "license": "MIT",
-  "homepage": "https://github.com/SurgeX-Labs/awx-mcp-server",
   "repository": {
-    "type": "git",
-    "url": "https://github.com/SurgeX-Labs/awx-mcp-server.git"
+    "url": "https://github.com/SurgeX-Labs/awx-mcp-server",
+    "source": "github"
   },
-  "keywords": [
-    "mcp",
-    "model-context-protocol",
-    "awx",
-    "ansible-tower",
-    "ansible",
-    "automation",
-    "github-copilot",
-    "claude",
-    "cursor",
-    "python",
-    "devops",
-    "infrastructure"
-  ],
-  "capabilities": [
-    "tools"
-  ],
-  "transport": [
-    "stdio"
-  ],
-  "deployment": {
-    "type": "github",
-    "owner": "SurgeX-Labs",
-    "repo": "awx-mcp-server"
-  },
-  "installation": {
-    "pip": "git+https://github.com/SurgeX-Labs/awx-mcp-server.git",
-    "command": "python -m awx_mcp_server.mcp_server"
-  },
-  "configuration": {
-    "required": [
-      "AWX_BASE_URL"
-    ],
-    "optional": [
-      "AWX_TOKEN",
-      "AWX_USERNAME",
-      "AWX_PASSWORD",
-      "AWX_VERIFY_SSL"
-    ]
-  },
-  "clients": [
-    "vscode",
-    "claude-desktop",
-    "cursor",
-    "windsurf",
-    "github-copilot",
-    "cline"
-  ],
-  "tools": [
+  "version": "1.1.0",
+  "packages": [
     {
-      "name": "env_list",
-      "description": "List configured AWX environments"
-    },
-    {
-      "name": "env_set_active",
-      "description": "Set the active AWX environment"
-    },
-    {
-      "name": "env_get_active",
-      "description": "Get current active environment"
-    },
-    {
-      "name": "env_test_connection",
-      "description": "Test AWX connection"
-    },
-    {
-      "name": "awx_system_info",
-      "description": "Get AWX system information, configuration, or dashboard"
-    },
-    {
-      "name": "awx_organizations_list",
-      "description": "List AWX organizations"
-    },
-    {
-      "name": "awx_organization_get",
-      "description": "Get organization details by ID"
-    },
-    {
-      "name": "awx_credentials_list",
-      "description": "List AWX credentials"
-    },
-    {
-      "name": "awx_credential_types_list",
-      "description": "List credential types"
-    },
-    {
-      "name": "awx_credential_create",
-      "description": "Create a new credential"
-    },
-    {
-      "name": "awx_credential_delete",
-      "description": "Delete a credential"
-    },
-    {
-      "name": "awx_templates_list",
-      "description": "List job templates"
-    },
-    {
-      "name": "awx_template_create",
-      "description": "Create a job template"
-    },
-    {
-      "name": "awx_template_delete",
-      "description": "Delete a job template"
-    },
-    {
-      "name": "awx_projects_list",
-      "description": "List AWX projects"
-    },
-    {
-      "name": "awx_project_create",
-      "description": "Create a new project"
-    },
-    {
-      "name": "awx_project_delete",
-      "description": "Delete a project"
-    },
-    {
-      "name": "awx_project_update",
-      "description": "Update project from SCM"
-    },
-    {
-      "name": "awx_inventories_list",
-      "description": "List AWX inventories"
-    },
-    {
-      "name": "awx_inventory_create",
-      "description": "Create an inventory"
-    },
-    {
-      "name": "awx_inventory_delete",
-      "description": "Delete an inventory"
-    },
-    {
-      "name": "awx_inventory_groups_list",
-      "description": "List inventory groups"
-    },
-    {
-      "name": "awx_inventory_group_create",
-      "description": "Create inventory group"
-    },
-    {
-      "name": "awx_inventory_group_delete",
-      "description": "Delete inventory group"
-    },
-    {
-      "name": "awx_inventory_hosts_list",
-      "description": "List inventory hosts"
-    },
-    {
-      "name": "awx_inventory_host_create",
-      "description": "Create inventory host"
-    },
-    {
-      "name": "awx_inventory_host_delete",
-      "description": "Delete inventory host"
-    },
-    {
-      "name": "awx_job_launch",
-      "description": "Launch a job from template"
-    },
-    {
-      "name": "awx_job_get",
-      "description": "Get job details and status"
-    },
-    {
-      "name": "awx_jobs_list",
-      "description": "List jobs with status filtering"
-    },
-    {
-      "name": "awx_job_cancel",
-      "description": "Cancel a running job"
-    },
-    {
-      "name": "awx_job_delete",
-      "description": "Delete a job"
-    },
-    {
-      "name": "awx_job_stdout",
-      "description": "Get job console output and logs"
-    },
-    {
-      "name": "awx_job_events",
-      "description": "Get job execution events and tasks"
-    },
-    {
-      "name": "awx_job_failure_summary",
-      "description": "Analyze job failures with actionable suggestions"
-    },
-    {
-      "name": "create_playbook",
-      "description": "Create Ansible playbook from YAML or natural language"
-    },
-    {
-      "name": "validate_playbook",
-      "description": "Validate playbook syntax using ansible-playbook --syntax-check"
-    },
-    {
-      "name": "ansible_playbook",
-      "description": "Execute playbook locally with optional parameters"
-    },
-    {
-      "name": "ansible_task",
-      "description": "Run ad-hoc Ansible task or module"
-    },
-    {
-      "name": "ansible_role",
-      "description": "Execute Ansible role locally"
-    },
-    {
-      "name": "create_role_structure",
-      "description": "Scaffold Ansible role directory structure"
-    },
-    {
-      "name": "list_playbooks",
-      "description": "List playbooks in workspace"
-    },
-    {
-      "name": "list_roles",
-      "description": "List roles in workspace"
-    },
-    {
-      "name": "ansible_inventory",
-      "description": "List inventory hosts and groups"
-    },
-    {
-      "name": "register_project",
-      "description": "Register local Ansible project directory"
-    },
-    {
-      "name": "unregister_project",
-      "description": "Remove project from registry"
-    },
-    {
-      "name": "list_registered_projects",
-      "description": "Show all registered Ansible projects"
-    },
-    {
-      "name": "project_playbooks",
-      "description": "Discover playbooks and roles in project"
-    },
-    {
-      "name": "project_run_playbook",
-      "description": "Run playbook from registered project"
-    },
-    {
-      "name": "git_push_project",
-      "description": "Commit and push project changes to git remote"
+      "registryType": "github",
+      "identifier": "SurgeX-Labs/awx-mcp-server",
+      "version": "1.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "description": "The base URL of your AWX/Ansible Tower instance",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": false,
+          "name": "AWX_BASE_URL"
+        },
+        {
+          "description": "AWX API token for authentication",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true,
+          "name": "AWX_TOKEN"
+        },
+        {
+          "description": "AWX username (alternative to token)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "AWX_USERNAME"
+        },
+        {
+          "description": "AWX password (alternative to token)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true,
+          "name": "AWX_PASSWORD"
+        },
+        {
+          "description": "Whether to verify SSL certificates (set to false for self-signed)",
+          "isRequired": false,
+          "format": "boolean",
+          "isSecret": false,
+          "name": "AWX_VERIFY_SSL"
+        }
+      ]
     }
   ]
 }
