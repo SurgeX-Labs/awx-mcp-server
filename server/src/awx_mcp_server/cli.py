@@ -181,7 +181,7 @@ def jobs_list(status, page, page_size):
     async def list_jobs():
         client = await get_client()
         results = await client.list_jobs(
-            status_filter=status,
+            status=status,
             page=page,
             page_size=page_size
         )

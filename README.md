@@ -1,45 +1,49 @@
 # AWX MCP - AI-Powered AWX/Ansible Automation
 
-**Control AWX/Ansible Tower through AI using the Model Context Protocol (MCP)**
+**Industry-standard MCP server for AWX/Ansible Tower automation**
 
-Integrate AWX automation with AI assistants like GitHub Copilot, Claude Desktop, or custom chatbots. Launch jobs, monitor executions, manage resources - all through natural language.
+The AWX MCP Server connects AWX/Ansible Tower to AI tools, giving AI agents and assistants the ability to manage job templates, launch and monitor jobs, manage inventories and projects, and automate infrastructure workflows through natural language interactions.
 
----
-
-## 🎯 Two Deployment Options
-
-### Option 1: VS Code Extension (For Developers)
-
-<img src="https://img.shields.io/badge/VS%20Code-Extension-007ACC?logo=visualstudiocode" alt="VS Code Extension"/>
-
-**Use Case**: Individual developers using GitHub Copilot in VS Code
-
-**Features**:
-- ✅ Direct GitHub Copilot Chat integration (`@awx` commands)
-- ✅ MCP server runs locally in VS Code
-- ✅ One-click AWX environment configuration
-- ✅ Real-time job monitoring in chat
-- ✅ No external server needed
-
-**Best For**: Personal AWX automation, development workflows, quick testing
+**Designed for developers who want to integrate their AI tools with AWX/Ansible Tower's automation capabilities.**
 
 ---
 
-### Option 2: Standalone Web Server (For Teams/Chatbots)
+## 🎯 Usage Patterns
 
-<img src="https://img.shields.io/badge/FastAPI-Web%20Server-009688?logo=fastapi" alt="FastAPI Server"/>
+### Primary: MCP Server (Industry Standard) ⭐ RECOMMENDED
 
-**Use Case**: Teams, organizations, or custom chatbot integrations
+<img src="https://img.shields.io/badge/MCP-Server-green?logo=python" alt="MCP Server"/>
+
+**Standard MCP implementation using STDIO transport (like Postman MCP, Claude MCP)**
+
+**Use Case**: AI assistants (GitHub Copilot, Claude, Cursor) + AWX automation
 
 **Features**:
-- ✅ RESTful API for any chatbot/application
-- ✅ Multi-tenant with API key authentication
-- ✅ CLI tools for direct automation
-- ✅ Docker, Kubernetes, Helm deployment
-- ✅ Prometheus metrics & monitoring
-- ✅ 16 AWX operations (templates, jobs, projects, inventories)
+- ✅ Works with any MCP client (Copilot, Claude, Cursor, Windsurf, etc.)
+- ✅ Industry standard pattern (STDIO transport)
+- ✅ Simple installation: `pip install git+https://github.com/USERNAME/awx-mcp-server.git`
+- ✅ Portable across all MCP-compatible tools
+- ✅ 18+ AWX operations (templates, jobs, projects, inventories)
 
-**Best For**: Team collaboration, production automation, chatbot backends, CI/CD integration
+**Best For**: AI-powered automation, natural language AWX control, any MCP client
+
+---
+
+### Optional: VS Code Extension (UI Enhancement)
+
+<img src="https://img.shields.io/badge/VS%20Code-Optional-007ACC?logo=visualstudiocode" alt="VS Code Extension"/>
+
+**Optional UI features for VS Code users**
+
+**Use Case**: VS Code users who want additional UI (sidebar views, tree providers)
+
+**Features**:
+- ✅ Sidebar with AWX instances, jobs, metrics
+- ✅ Tree view of AWX resources
+- ✅ Configuration webview
+- ✅ Auto-configures MCP (or respects manual setup)
+
+**Best For**: VS Code users wanting rich UI alongside MCP functionality
 
 ---
 
