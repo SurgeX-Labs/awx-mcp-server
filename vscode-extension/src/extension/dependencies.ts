@@ -54,19 +54,20 @@ export async function checkDependencies(outputChannel: vscode.OutputChannel): Pr
         
         // Check if awx-mcp-server package is installed
         try {
-            await execCommand(pythonPath, ['-m', 'awx_mcp_server', '--version']);
-            outputChannel.appendLine('✓ AWX MCP Server package is installed');
+            const result = await execCommand(pythonPath, ['-c', 'import awx_mcp_server; print(awx_mcp_server.__version__)']);
+            outputChannel.appendLine(`✓ AWX MCP Server ${result.trim()} is installed`);
             return true;
         } catch (error) {
             outputChannel.appendLine('✗ AWX MCP Server package not installed');
             outputChannel.appendLine('');
+            outputChannel.appendLine('The extension will now install awx-mcp-server from PyPI');
+            outputChannel.appendLine('');
             outputChannel.appendLine('Required Python packages:');
-            outputChannel.appendLine('  • awx-mcp-server (bundled with extension)');
+            outputChannel.appendLine('  • awx-mcp-server (will be installed via pip)');
             outputChannel.appendLine('  • mcp >= 0.9.0');
             outputChannel.appendLine('  • httpx >= 0.27.0');
             outputChannel.appendLine('  • pydantic >= 2.0.0');
             outputChannel.appendLine('  • keyring >= 25.0.0');
-            outputChannel.appendLine('  • and more...');
             return false;
         }
     } catch (error: any) {
@@ -84,32 +85,32 @@ export async function setupDependencies(
 ): Promise<void> {
     const config = vscode.workspace.getConfiguration('awx-mcp');
     const pythonPath = config.get<string>('pythonPath') || 'python';
-    const bundledServerPath = extensionPath + '\\bundled\\awx-mcp-server';
     
     outputChannel.show();
     outputChannel.appendLine('');
     outputChannel.appendLine('='.repeat(60));
-    outputChannel.appendLine('Installing AWX MCP Server Dependencies');
+    outputChannel.appendLine('Installing AWX MCP Server from PyPI');
     outputChannel.appendLine('='.repeat(60));
     outputChannel.appendLine('');
     
     await vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
-        title: 'Installing AWX MCP Server dependencies...',
+        title: 'Installing awx-mcp-server from PyPI...',
         cancellable: false
     }, async (progress) => {
         try {
-            // Install the bundled awx-mcp-server package
-            progress.report({ message: 'Installing AWX MCP Server package...' });
-            outputChannel.appendLine('Step 1: Installing AWX MCP Server package...');
-            outputChannel.appendLine(`From: ${bundledServerPath}`);
+            // Install awx-mcp-server from PyPI
+            progress.report({ message: 'Installing awx-mcp-server from PyPI...' });
+            outputChannel.appendLine('Step 1: Installing awx-mcp-server from PyPI...');
+            outputChannel.appendLine('Package: awx-mcp-server');
+            outputChannel.appendLine('Source: https://pypi.org/project/awx-mcp-server/');
             outputChannel.appendLine('');
             
             const installOutput = await execCommand(pythonPath, [
-                '-m', 'pip', 'install', '-e', bundledServerPath
+                '-m', 'pip', 'install', '--upgrade', 'awx-mcp-server'
             ]);
             outputChannel.appendLine(installOutput);
-            outputChannel.appendLine('✓ AWX MCP Server package installed');
+            outputChannel.appendLine('✓ awx-mcp-server package installed');
             outputChannel.appendLine('');
             
             // Verify installation
@@ -117,15 +118,15 @@ export async function setupDependencies(
             outputChannel.appendLine('Step 2: Verifying installation...');
             
             try {
-                const version = await execCommand(pythonPath, ['-m', 'awx_mcp_server', '--version']);
-                outputChannel.appendLine(`✓ Verification successful: ${version.trim()}`);
+                const version = await execCommand(pythonPath, ['-c', 'import awx_mcp_server; print(awx_mcp_server.__version__)']);
+                outputChannel.appendLine(`✓ Verification successful: awx-mcp-server ${version.trim()}`);
                 outputChannel.appendLine('');
                 outputChannel.appendLine('='.repeat(60));
                 outputChannel.appendLine('✓ Installation Complete');
                 outputChannel.appendLine('='.repeat(60));
                 
                 vscode.window.showInformationMessage(
-                    'AWX MCP Server dependencies installed successfully!',
+                    'awx-mcp-server installed successfully!',
                     'Configure AWX',
                     'Reload Window'
                 ).then(selection => {
@@ -146,11 +147,12 @@ export async function setupDependencies(
             outputChannel.appendLine(`Error: ${error.message}`);
             outputChannel.appendLine('');
             outputChannel.appendLine('Manual installation:');
-            outputChannel.appendLine(`  1. Open terminal in: ${bundledServerPath}`);
-            outputChannel.appendLine(`  2. Run: ${pythonPath} -m pip install -e .`);
+            outputChannel.appendLine(`  1. Open terminal`);
+            outputChannel.appendLine(`  2. Run: ${pythonPath} -m pip install awx-mcp-server`);
+            outputChannel.appendLine('  3. Restart VS Code');
             
             vscode.window.showErrorMessage(
-                `Failed to install AWX MCP dependencies: ${error.message}`,
+                `Failed to install awx-mcp-server: ${error.message}`,
                 'View Output',
                 'Retry'
             ).then(selection => {

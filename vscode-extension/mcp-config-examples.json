@@ -1,0 +1,96 @@
+{
+  "// OPTION 1: Single AWX Instance (Simple)": "",
+  "github.copilot.chat.mcpServers": {
+    "awx": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "https://awx.example.com",
+        "AWX_TOKEN": "${secret:awx-token}"
+      }
+    }
+  },
+
+  "// OPTION 2: Multiple AWX Instances (Production + Staging)": "",
+  "github.copilot.chat.mcpServers_multi": {
+    "awx-production": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "https://awx-prod.example.com",
+        "AWX_TOKEN": "${secret:awx-prod-token}",
+        "AWX_VERIFY_SSL": "true",
+        "LOG_LEVEL": "info"
+      }
+    },
+    "awx-staging": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "https://awx-staging.example.com",
+        "AWX_TOKEN": "${secret:awx-staging-token}",
+        "AWX_VERIFY_SSL": "false",
+        "LOG_LEVEL": "debug"
+      }
+    }
+  },
+
+  "// OPTION 3: Username/Password Authentication": "",
+  "github.copilot.chat.mcpServers_password": {
+    "awx": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "https://awx.example.com",
+        "AWX_USERNAME": "admin",
+        "AWX_PASSWORD": "${secret:awx-password}",
+        "AWX_VERIFY_SSL": "true"
+      }
+    }
+  },
+
+  "// OPTION 4: Custom Python Path": "",
+  "github.copilot.chat.mcpServers_custom_python": {
+    "awx": {
+      "command": "C:\\Python312\\python.exe",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "https://awx.example.com",
+        "AWX_TOKEN": "${secret:awx-token}"
+      }
+    }
+  },
+
+  "// OPTION 5: EU Region Support": "",
+  "github.copilot.chat.mcpServers_eu": {
+    "awx": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server", "--region", "eu"],
+      "env": {
+        "AWX_BASE_URL": "https://awx.eu.example.com",
+        "AWX_TOKEN": "${secret:awx-token}"
+      }
+    }
+  },
+
+  "// INSTRUCTIONS": "",
+  "// 1. Choose ONE option above that fits your needs": "",
+  "// 2. Copy the content inside the 'mcpServers' object": "",
+  "// 3. Open VS Code User Settings (JSON):": "Ctrl+Shift+P → Preferences: Open User Settings (JSON)",
+  "// 4. Paste the configuration": "",
+  "// 5. Replace example.com with your actual AWX URL": "",
+  "// 6. Store secrets:": "Ctrl+Shift+P → GitHub: Store Secret",
+  "// 7. Reload VS Code:": "Ctrl+Shift+P → Developer: Reload Window",
+  "// 8. Test:": "@workspace list AWX job templates",
+
+  "// ENVIRONMENT VARIABLES REFERENCE": "",
+  "// Required (one of):": "",
+  "//   - AWX_TOKEN: API token from AWX": "",
+  "//   - AWX_USERNAME + AWX_PASSWORD: Basic auth credentials": "",
+  "// Required:": "",
+  "//   - AWX_BASE_URL: Full URL to AWX instance (e.g., https://awx.example.com)": "",
+  "// Optional:": "",
+  "//   - AWX_VERIFY_SSL: true/false (default: true)": "",
+  "//   - LOG_LEVEL: debug/info/warning/error (default: info)": "",
+  "//   - PYTHONPATH: Additional Python paths if needed": ""
+}

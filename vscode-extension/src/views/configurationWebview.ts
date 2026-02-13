@@ -121,18 +121,10 @@ export class ConfigurationWebview {
             const { spawn } = require('child_process');
             const config = vscode.workspace.getConfiguration('awx-mcp');
             const pythonPath = config.get<string>('pythonPath') || 'python';
-            const path = require('path');
-            const serverPath = path.join(
-                this.context.extensionPath,
-                'bundled',
-                'awx-mcp-server',
-                'src'
-            ).replace(/\\/g, '\\\\');
 
             const pythonScript = `
 import sys
 import asyncio
-sys.path.insert(0, r'${serverPath}')
 
 from awx_mcp_server.domain import AWXEnvironment
 from awx_mcp_server.clients import ${data.authType === 'token' ? 'TokenAWXClient' : 'PasswordAWXClient'}

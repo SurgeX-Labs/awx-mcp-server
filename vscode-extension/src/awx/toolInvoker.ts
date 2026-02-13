@@ -175,14 +175,6 @@ async function invokeMCPTool(
  * Generate Python script for tool invocation
  */
 function generatePythonScript(toolName: string, args: any, extensionPath: string): string {
-    const path = require('path');
-    const bundledServerPath = path.join(
-        extensionPath,
-        'bundled',
-        'awx-mcp-server',
-        'src'
-    ).replace(/\\/g, '\\\\');
-
     return `
 import sys
 import json
@@ -203,7 +195,6 @@ _original_stdout = sys.stdout
 sys.stdout = sys.stderr
 
 try:
-    sys.path.insert(0, r'${bundledServerPath}')
 
     from awx_mcp_server.storage import ConfigManager, CredentialStore
     from awx_mcp_server.clients import CompositeAWXClient

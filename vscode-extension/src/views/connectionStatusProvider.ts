@@ -130,7 +130,6 @@ export class ConnectionStatusProvider implements vscode.TreeDataProvider<StatusI
 import sys
 import json
 from uuid import uuid4
-sys.path.insert(0, r'${vscode.extensions.getExtension('awx-mcp-team.awx-mcp-extension')?.extensionPath}\\bundled\\awx-mcp-server\\src')
 
 from awx_mcp_server.clients import CompositeAWXClient
 from awx_mcp_server.domain import EnvironmentConfig

@@ -1,9 +1,10 @@
 {
   "name": "awx-mcp-extension",
-  "displayName": "AWX MCP Integration",
-  "description": "Integrate AWX/Ansible Tower with GitHub Copilot through Model Context Protocol (MCP)",
+  "displayName": "AWX MCP Extension (Optional UI Enhancement)",
+  "description": "Optional UI enhancements for AWX MCP Server. Adds sidebar views, tree providers, and configuration UI. Note: AWX MCP Server can be used without this extension via direct MCP configuration.",
   "version": "1.0.0",
-  "publisher": "awx-mcp-team",
+  "publisher": "SurgeXlabs",
+  "icon": "resources/awx-gear-optimized.png",
   "galleryBanner": {
     "color": "#EE0000",
     "theme": "dark"
@@ -247,7 +248,7 @@
         {
           "id": "awx-mcp-explorer",
           "title": "AWX MCP",
-          "icon": "resources/awx-mcp.svg"
+          "icon": "resources/awx-gear.svg"
         }
       ]
     },
@@ -411,12 +412,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/awx-mcp"
+    "url": "https://github.com/SurgeX-Labs/awx-mcp-server"
   },
   "bugs": {
-    "url": "https://github.com/your-org/awx-mcp/issues"
+    "url": "https://github.com/SurgeX-Labs/awx-mcp-server/issues"
   },
-  "homepage": "https://github.com/your-org/awx-mcp#readme",
+  "homepage": "https://github.com/SurgeX-Labs/awx-mcp-server#readme",
   "license": "MIT",
   "qna": "marketplace",
   "pricing": "Free"

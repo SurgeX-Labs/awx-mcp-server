@@ -21,7 +21,6 @@ export async function executePythonCommand(
     // Set environment variables for Python subprocess
     const env = {
         ...process.env,
-        PYTHONPATH: path.join(extensionPath, 'bundled', 'awx-mcp-server', 'src'),
         PYTHONUNBUFFERED: '1'
     };
     

@@ -6,6 +6,57 @@
 
 Integrate AWX/Ansible Tower with GitHub Copilot through the Model Context Protocol (MCP). Manage your infrastructure automation directly from VS Code using natural language.
 
+## 🎯 Two Ways to Use
+
+### Option 1: Pure MCP (Industry Standard) ⭐ RECOMMENDED
+
+Use AWX MCP Server directly with GitHub Copilot Chat - **no extension needed**:
+
+```bash
+# Install server
+pip install awx-mcp-server
+
+# Configure in VS Code settings.json
+{
+  "github.copilot.chat.mcpServers": {
+    "awx": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "https://awx.example.com",
+        "AWX_TOKEN": "${secret:awx-token}"
+      }
+    }
+  }
+}
+
+# Use with Copilot Chat
+@workspace list AWX job templates
+```
+
+**Benefits:**
+- ✅ Standard MCP implementation (like Postman MCP)
+- ✅ Works with Copilot, Claude, Cursor, any MCP client
+- ✅ Simple configuration, portable
+- ✅ Independent server updates
+
+📖 **[Complete MCP Setup Guide →](MCP_COPILOT_SETUP.md)**
+
+### Option 2: Extension + MCP (Rich UI)
+
+Install this extension for enhanced UI features:
+
+**Features:**
+- 🤖 `@awx` chat participant with intelligent tool invocation
+- 📊 Sidebar views (instances, jobs, metrics, logs)
+- 🌲 Tree view of AWX resources
+- 🎨 Configuration webview UI
+- ⚡ Automatic MCP setup
+
+**Install:** Search "AWX MCP Extension" in VS Code Extensions
+
+📖 **[Architecture Comparison: MCP vs Extension →](ARCHITECTURE_COMPARISON.md)**
+
 ## ✨ Features
 
 - 🤖 **GitHub Copilot Chat Participant**: Use `@awx` to intelligently interact with AWX (auto-invokes tools!)
@@ -51,14 +102,33 @@ Use the "Add context" button in Copilot Chat:
 - **AWX or Ansible Tower** instance with API access
 - **GitHub Copilot** extension (for AI integration)
 
+## 🏗️ Architecture
+
+This extension uses **Python MCP Server via PyPI**:
+- ✅ Server: `pip install awx-mcp-server` from PyPI
+- ✅ Package size: 11.7 MB (not bundled, smaller download)
+- ✅ Independent updates without republishing extension
+- ✅ Full AWX API support through official Python SDK
+
+**How it works:**
+1. Extension auto-detects Python on your system
+2. Installs `awx-mcp-server` via pip (one-time, 15-30 sec)
+3. Spawns server: `python -m awx_mcp_server`
+4. Communicates via JSON-RPC over STDIO
+
+📖 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed technical information.
+
 ## 🚀 Quick Start
 
 1. **Install the Extension** from the VS Code Marketplace
-2. **Configure AWX Connection**:
+2. **Python Setup** (one-time):
+   - The extension will automatically install `awx-mcp-server` from PyPI
+   - Or manually: `pip install awx-mcp-server`
+3. **Configure AWX Connection**:
    - Open Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`)
    - Run `AWX MCP: Configure AWX Environment`
    - Enter your AWX URL, username, and token/password
-3. **Start Using with Copilot**:
+4. **Start Using with Copilot**:
    ```
    Open GitHub Copilot Chat and try:
    "@awx list my job templates"
@@ -67,7 +137,8 @@ Use the "Add context" button in Copilot Chat:
    ```
 
 The extension will automatically:
-- Install the required MCP server on first use
+- Detect your Python environment
+- Install `awx-mcp-server` from PyPI if not present
 - Register as `@awx` chat participant
 - Configure MCP tools for Copilot
 
@@ -222,10 +293,55 @@ npm install
 
 ## 📖 Documentation
 
-- [Getting Started Guide](../docs/GETTING_STARTED.md)
-- [Extension Installation](../docs/EXTENSION_INSTALL_REBUILD.md)
-- [Troubleshooting](../docs/EXTENSION_TROUBLESHOOTING.md)
-- [FAQ](../docs/FAQ.md)
+### Getting Started
+- **[MCP Copilot Setup Guide](MCP_COPILOT_SETUP.md)** - Industry standard MCP configuration (no extension needed) ⭐
+- **[Configuration Examples](mcp-config-examples.json)** - Copy-paste MCP configurations
+- **[Installation Guide](INSTALLATION_GUIDE.md)** - Extension installation and troubleshooting
+
+### Architecture & Design
+- **[Architecture Comparison](ARCHITECTURE_COMPARISON.md)** - MCP vs Extension patterns, industry standards ⭐
+- **[Architecture Overview](ARCHITECTURE.md)** - Detailed technical architecture (Python/PyPI)
+- **[Production Ready Checklist](PRODUCTION_READY.md)** - Deployment readiness
+
+### Testing & Development
+- **[Test Guide](TEST_GUIDE.md)** - Manual and automated testing procedures
+- **[Final Summary](FINAL_SUMMARY.md)** - Package optimization and current status
+- **[Build Instructions](BUILD.md)** - Building from source
+
+## 🏗️ Architecture Patterns
+
+This project demonstrates **two MCP integration approaches**:
+
+### Industry Standard (Pure MCP) ⭐
+```
+GitHub Copilot Chat
+    ↓ (MCP Protocol)
+awx-mcp-server (Python)
+    ↓ (REST API)
+AWX/Ansible Tower
+```
+
+**Configuration:** `.vscode/settings.json` or user settings  
+**Guide:** [MCP_COPILOT_SETUP.md](MCP_COPILOT_SETUP.md)  
+**Pattern:** Same as Postman MCP, Claude MCP, industry standard  
+**Works with:** GitHub Copilot, Claude, Cursor, any MCP client  
+
+### Extension Enhanced (Rich UI)
+```
+VS Code Extension (TypeScript)
+    ├─ Spawns → awx-mcp-server (Python)
+    ├─ Provides → Sidebar views, tree providers
+    └─ Manages → Server lifecycle, configuration UI
+```
+
+**Installation:** VS Code Marketplace extension  
+**Guide:** [Installation Guide](INSTALLATION_GUIDE.md)  
+**Benefits:** Automatic setup, rich UI, one-click experience  
+**Comparison:** [ARCHITECTURE_COMPARISON.md](ARCHITECTURE_COMPARISON.md)  
+
+**Choose based on needs:**
+- **MCP Only:** Standard, portable, simple, works everywhere
+- **Extension:** Rich UI, automatic setup, AWX-specific features
 
 ## 🤝 Contributing
 
@@ -235,13 +351,25 @@ Contributions are welcome! Please see our contribution guidelines.
 
 MIT License - see [LICENSE](LICENSE) for details.
 
-## 🔗 Links
+## 🆘 Support
 
-- [Marketplace](https://marketplace.visualstudio.com/items?itemName=awx-mcp-team.awx-mcp-extension)
-- [GitHub Repository](https://github.com/your-org/awx-mcp-python)
-- [Report Issues](https://github.com/your-org/awx-mcp-python/issues)
-- [Model Context Protocol](https://modelcontextprotocol.io)
+- **GitHub Issues:** [Report bugs or request features](https://github.com/SurgeX-Labs/awx-mcp-server/issues)
+- **MCP Server (PyPI):** `pip install awx-mcp-server`
+- **Extension (Marketplace):** `surgexlabs.awx-mcp-extension`
+- **Documentation:** See links above
+
+## 🔗 Quick Links
+
+- **Marketplace:** [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=surgexlabs.awx-mcp-extension)
+- **GitHub:** [Source Repository](https://github.com/SurgeX-Labs/awx-mcp-server)
+- **MCP Spec:** [Model Context Protocol](https://modelcontextprotocol.io)
+- **AWX Docs:** [Ansible Automation Platform](https://docs.ansible.com/automation-controller/)
 
 ---
+
+**Version:** 1.0.0  
+**Architecture:** Python MCP Server (PyPI) + Optional VS Code Extension  
+**Industry Standard:** ✅ Compatible with Postman MCP pattern  
+**Works With:** GitHub Copilot, Claude, Cursor, any MCP client  
 
 **Enjoy automating with AWX and GitHub Copilot! 🚀**

@@ -1,19 +1,28 @@
-# Build outputs
+# Source files (compiled to out/)
 src/**
 **/*.ts
+!src/**/*.d.ts
 **/*.map
-.vscode/**
-.vscode-test/**
-node_modules/**/.bin/**
 
 # Development files
 tsconfig.json
 .eslintrc.json
 .gitignore
 *.vsix
+.vscode/**
+.vscode-test/**
 
-# Documentation (keep README.md and CHANGELOG.md)
-docs/**
+# Build scripts
+marketplace-prep.ps1
+marketplace-prep.sh
+build.ps1
+Makefile
+
+# Bundled Python server (NOT included - users install via pip)
+bundled/**
+
+# Temporary files
+temp-verify/**
 
 # Tests
 test/**
@@ -21,41 +30,42 @@ tests/**
 **/*.test.ts
 **/*.test.js
 
+# Documentation (keep essential user docs in package)
+# Include: README.md, CHANGELOG.md, LICENSE, MCP_COPILOT_SETUP.md
+# Exclude: Development docs, architecture details
+ARCHITECTURE_COMPARISON.md
+ARCHITECTURE_COMPARISON_SUMMARY.md
+INSTALLATION_GUIDE.md
+TEST_GUIDE.md
+docs/**
+
 # CI/CD
 .github/**
 .gitlab-ci.yml
 azure-pipelines.yml
 
-# Python cache
+# Python artifacts
 **/__pycache__/**
 **/*.pyc
 **/*.pyo
 **/*.pyd
 .Python
 **/*.so
-
-# Pytest
 .pytest_cache/**
 .coverage
 htmlcov/**
 
-# Development only
-bundled/awx-mcp-server/src/**/__pycache__/**
-bundled/awx-mcp-server/.pytest_cache/**
-bundled/awx-mcp-server/test/**
-bundled/awx-mcp-server/tests/**
-bundled/awx-mcp-server/build/**
+# Old/unused resource files (keep only optimized versions)
+resources/awx-gear.png
+resources/AWX-MCP.png
+resources/icon.png
+resources/awx-mcp.svg
+resources/AWX-MCP-ICON.png
 
-# Keep these essential files
-!out/**
-!bundled/**
-!bundled/awx-mcp-server/libs/**
-!bundled/awx-mcp-server/dist/**
-!bundled/awx-mcp-server/src/**
-!resources/**
-!README.md
-!CHANGELOG.md
-!LICENSE
+# Node
+node_modules/**/.bin/**
 
-# Editor settings
-.vscode/**
+# Keep essential directories:
+# - out/ (compiled JavaScript)
+# - resources/ (icons, images)
+# - README.md, CHANGELOG.md, LICENSE (auto-included)
