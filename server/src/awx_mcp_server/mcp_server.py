@@ -1,7 +1,9 @@
 """MCP Server implementation for AWX integration."""
 
 import asyncio
+import os
 from typing import Any, Optional
+from uuid import uuid4
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -45,19 +47,64 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
 
 
     def get_active_client() -> tuple[EnvironmentConfig, CompositeAWXClient]:
-        """Get client for active environment."""
-        env = config_manager.get_active()
-        
-        # Determine credential type
+        """Get client for active environment, falling back to environment variables if no config exists."""
         try:
-            username, secret = credential_store.get_credential(env.env_id, CredentialType.PASSWORD)
-            is_token = False
-        except Exception:
-            username, secret = credential_store.get_credential(env.env_id, CredentialType.TOKEN)
-            is_token = True
-        
-        client = CompositeAWXClient(env, username, secret, is_token)
-        return env, client
+            # Try to get stored environment
+            env = config_manager.get_active()
+            
+            # Determine credential type
+            try:
+                username, secret = credential_store.get_credential(env.env_id, CredentialType.PASSWORD)
+                is_token = False
+            except Exception:
+                username, secret = credential_store.get_credential(env.env_id, CredentialType.TOKEN)
+                is_token = True
+            
+            client = CompositeAWXClient(env, username, secret, is_token)
+            return env, client
+            
+        except (NoActiveEnvironmentError, Exception) as e:
+            # Fall back to environment variables
+            logger.info(f"No stored environment found, checking environment variables: {e}")
+            
+            awx_base_url = os.getenv("AWX_BASE_URL")
+            awx_token = os.getenv("AWX_TOKEN")
+            awx_username = os.getenv("AWX_USERNAME")
+            awx_password = os.getenv("AWX_PASSWORD")
+            awx_verify_ssl = os.getenv("AWX_VERIFY_SSL", "true").lower() == "true"
+            
+            # Debug logging
+            logger.info(f"Environment variables: AWX_BASE_URL={awx_base_url}, AWX_TOKEN={'*' * 10 if awx_token else None}, AWX_USERNAME={awx_username}, AWX_VERIFY_SSL={awx_verify_ssl}")
+            
+            if not awx_base_url:
+                raise NoActiveEnvironmentError(
+                    "No active environment configured and AWX_BASE_URL environment variable not set"
+                )
+            
+            # Create temporary environment from env vars
+            temp_env = EnvironmentConfig(
+                env_id=uuid4(),
+                name="default",
+                base_url=awx_base_url,
+                verify_ssl=awx_verify_ssl,
+                is_default=True,
+                allowed_job_templates=[],
+                allowed_inventories=[]
+            )
+            
+            # Determine auth method
+            if awx_token:
+                logger.info("Using AWX_TOKEN from environment variables")
+                client = CompositeAWXClient(temp_env, "", awx_token, is_token=True)
+            elif awx_username and awx_password:
+                logger.info("Using AWX_USERNAME/AWX_PASSWORD from environment variables")
+                client = CompositeAWXClient(temp_env, awx_username, awx_password, is_token=False)
+            else:
+                raise NoActiveEnvironmentError(
+                    "No active environment configured and neither AWX_TOKEN nor AWX_USERNAME/AWX_PASSWORD set"
+                )
+            
+            return temp_env, client
 
 
     def check_allowlist(env: EnvironmentConfig, template_id: int, template_name: str) -> None:
@@ -207,7 +254,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
         # Discovery
         Tool(
             name="awx_templates_list",
-            description="List AWX job templates",
+            description="List AWX job templates (NOT for recent jobs or job history). Templates are playbook definitions, configurations, settings. This shows available templates to run, not execution history or recent activity. For recent jobs/runs/executions, use awx_jobs_list instead.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -413,13 +460,13 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
         # Execution
         Tool(
             name="awx_job_launch",
-            description="Launch an AWX job from template",
+            description="Launch/execute/run/start a new AWX job from a template. Creates a new job execution instance.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "template_id": {"type": "number", "description": "Job template ID"},
-                    "extra_vars": {"type": "object", "description": "Extra variables (JSON)"},
-                    "limit": {"type": "string", "description": "Limit hosts"},
+                    "template_id": {"type": "number", "description": "Job template ID to execute"},
+                    "extra_vars": {"type": "object", "description": "Extra variables (JSON) to pass to playbook"},
+                    "limit": {"type": "string", "description": "Limit execution to specific hosts"},
                     "tags": {
                         "type": "array",
                         "items": {"type": "string"},
@@ -436,23 +483,23 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
         ),
         Tool(
             name="awx_job_get",
-            description="Get AWX job status and details",
+            description="Get specific AWX job metadata and summary details including status, timing, template info, and playbook name. Use this to check a single job's current state, whether it succeeded or failed, and its start/finish times. Does NOT return console output or logs — use awx_job_stdout for that.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "job_id": {"type": "number", "description": "Job ID"},
+                    "job_id": {"type": "number", "description": "Job ID from job execution"},
                 },
                 "required": ["job_id"],
             },
         ),
         Tool(
             name="awx_jobs_list",
-            description="List AWX jobs",
+            description="Show/list/display/view recent AWX jobs, job execution history, completed jobs, running jobs, failed jobs, job status, job runs, playbook executions. Use this when user asks to 'show recent jobs', 'list jobs', 'view jobs', 'get jobs', 'display job history', 'see recent activity', 'check job status', or any query about AWX job executions with timestamps and results.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "status": {"type": "string", "description": "Filter by status"},
-                    "created_after": {"type": "string", "description": "Filter by created date"},
+                    "status": {"type": "string", "description": "Filter by status (successful, failed, running, etc.)"},
+                    "created_after": {"type": "string", "description": "Filter by created date (ISO format)"},
                     "page": {"type": "number", "description": "Page number (default: 1)"},
                     "page_size": {"type": "number", "description": "Page size (default: 25)"},
                 },
@@ -460,7 +507,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
         ),
         Tool(
             name="awx_job_cancel",
-            description="Cancel a running AWX job",
+            description="Cancel/stop/abort a currently running AWX job execution. Use this when user asks to 'cancel job', 'stop job', 'abort job', 'kill job', or any request to halt a running job.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -471,7 +518,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
         ),
         Tool(
             name="awx_job_delete",
-            description="Delete an AWX job",
+            description="Delete/remove an AWX job record from history. Use this when user asks to 'delete job', 'remove job', 'clean up job', or any request to permanently remove a job record.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -483,29 +530,29 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
         # Diagnostics
         Tool(
             name="awx_job_stdout",
-            description="Get AWX job stdout/output",
+            description="Show/display/view/get the console output, stdout, logs, or terminal output of an AWX job execution. Use this when user asks to 'show job output', 'view job logs', 'display console output', 'get job stdout', 'show what the job printed', 'see the playbook output', 'show execution log', or any request to see the text/log output produced by a job run.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "job_id": {"type": "number", "description": "Job ID"},
+                    "job_id": {"type": "number", "description": "Job ID to retrieve output for"},
                     "format": {
                         "type": "string",
                         "description": "Output format (txt or json)",
                         "enum": ["txt", "json"],
                     },
-                    "tail_lines": {"type": "number", "description": "Number of lines from end"},
+                    "tail_lines": {"type": "number", "description": "Number of lines from end (omit to get all output)"},
                 },
                 "required": ["job_id"],
             },
         ),
         Tool(
             name="awx_job_events",
-            description="Get AWX job events",
+            description="Show/list/view/get detailed events, tasks, plays, and execution steps of an AWX job. Use this when user asks to 'show job events', 'view job tasks', 'list execution steps', 'see what tasks ran', 'show detailed job activity', 'view play-by-play execution', or any request about the individual task/play events within a job run. Can filter to show only failed events.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "job_id": {"type": "number", "description": "Job ID"},
-                    "failed_only": {"type": "boolean", "description": "Show only failed events"},
+                    "job_id": {"type": "number", "description": "Job ID to retrieve events for"},
+                    "failed_only": {"type": "boolean", "description": "Show only failed events (default: false)"},
                     "page": {"type": "number", "description": "Page number (default: 1)"},
                     "page_size": {"type": "number", "description": "Page size (default: 100)"},
                 },
@@ -514,11 +561,11 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
         ),
         Tool(
             name="awx_job_failure_summary",
-            description="Analyze job failure and get actionable suggestions",
+            description="Analyze/diagnose/debug/troubleshoot why an AWX job failed and get actionable fix suggestions. Use this when user asks 'why did job fail', 'analyze failure', 'debug job error', 'show failure summary', 'what went wrong with job', 'diagnose job problem', 'troubleshoot job', or any request to understand and fix a failed job execution.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "job_id": {"type": "number", "description": "Job ID"},
+                    "job_id": {"type": "number", "description": "Job ID of the failed job to analyze"},
                 },
                 "required": ["job_id"],
             },
