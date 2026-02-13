@@ -1,19 +1,100 @@
-# AWX MCP Standalone Server
+# AWX MCP Server
 
-**Fully self-contained** FastAPI server for centralized AWX MCP management.
+**Industry-standard MCP server for AWX/Ansible Tower automation**
 
-## Features
+Control AWX/Ansible Tower through the Model Context Protocol (MCP). Use with GitHub Copilot, Claude, Cursor, or any MCP-compatible client.
 
-- 🌐 **HTTP/REST API**: FastAPI-based RESTful interface
-- 🔐 **Multi-tenant**: Isolated environments per API key
-- 📊 **Monitoring**: Built-in metrics and request tracking
-- 🚀 **Scalable**: Deploy on Docker, Kubernetes, or Helm
-- 🔒 **Secure**: API key authentication with expiry
-- 📦 **Self-contained**: No external dependencies (all AWX client code included)
+---
 
-## Quick Start
+## 🎯 Two Usage Modes
 
-### Local Development
+### 1. STDIO Mode (Industry Standard) ⭐ RECOMMENDED
+
+Use with MCP clients (GitHub Copilot, Claude, Cursor):
+
+```bash
+pip install awx-mcp-server
+```
+
+Configure in your MCP client (see [QUICK_START.md](QUICK_START.md))
+
+✅ **Works with:** GitHub Copilot, Claude Desktop, Cursor, Windsurf, any MCP client  
+✅ **Pattern:** Standard MCP (like Postman MCP, Anthropic MCP)  
+✅ **Setup:** Simple configuration in client settings  
+
+### 2. HTTP/REST Mode (Alternative)
+
+Deploy as a centralized HTTP server:
+
+```bash
+awx-mcp-server start --host 0.0.0.0 --port 8000
+```
+
+✅ **Use case:** Remote MCP server, multi-tenant deployments  
+✅ **Deploy:** Docker, Kubernetes, cloud platforms  
+✅ **Access:** HTTP transport over network  
+
+---
+
+## � Installation
+
+### From PyPI (Stable)
+```bash
+pip install awx-mcp-server
+```
+
+### From GitHub (Latest)
+```bash
+pip install git+https://github.com/YOUR-USERNAME/awx-mcp-server.git
+```
+
+### For Development
+```bash
+git clone https://github.com/YOUR-USERNAME/awx-mcp-server.git
+cd awx-mcp-server
+pip install -e .
+```
+
+**See:** [GITHUB_INSTALLATION.md](GITHUB_INSTALLATION.md) for detailed GitHub installation guide
+
+---
+
+## 📚 Quick Start
+
+### For MCP Clients (Recommended)
+
+**See:** [QUICK_START.md](QUICK_START.md) for complete setup guide
+
+**TL;DR:**
+```bash
+# Install (PyPI or GitHub)
+pip install awx-mcp-server
+# OR
+pip install git+https://github.com/YOUR-USERNAME/awx-mcp-server.git
+
+# Configure in VS Code settings.json
+{
+  "github.copilot.chat.mcpServers": {
+    "awx": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "https://awx.example.com",
+        "AWX_TOKEN": "${secret:awx-token}"
+      }
+    }
+  }
+}
+
+# Use with Copilot Chat
+@workspace list AWX job templates
+```
+
+### For HTTP Server Deployment
+
+**See:** [HTTP_DEPLOYMENT.md](HTTP_DEPLOYMENT.md) for deployment guide
+
+**TL;DR:**
 
 ```bash
 cd server

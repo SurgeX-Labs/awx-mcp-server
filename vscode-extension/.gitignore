@@ -8,6 +8,12 @@ out/
 *.vsix
 .vscode-test/
 
+# Bundled Python server (install via pip instead)
+bundled/
+
+# Temporary verification files
+temp-verify/
+
 # OS files
 .DS_Store
 Thumbs.db

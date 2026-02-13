@@ -1,30 +1,58 @@
 /**
  * MCP server configuration for GitHub Copilot Chat
+ * 
+ * Note: This is OPTIONAL. Users can configure AWX MCP server directly in their VS Code settings
+ * following the industry standard pattern (like Postman MCP, Claude MCP).
+ * 
+ * This extension provides UI enhancements (sidebar, views) but MCP configuration can work independently.
  */
 
 import * as vscode from 'vscode';
 
 /**
  * Configure AWX MCP server for GitHub Copilot Chat
- * This configures the server in VS Code settings so Copilot can discover it
+ * Detects if user has already configured MCP manually and respects their configuration.
+ * Only auto-configures if no existing MCP configuration found.
  */
 export async function configureMcpServer(outputChannel: vscode.OutputChannel): Promise<void> {
     try {
         const config = vscode.workspace.getConfiguration();
+        
+        // Check if GitHub Copilot supports MCP configuration
+        const inspect = config.inspect('github.copilot.chat.mcpServers');
+        if (!inspect) {
+            outputChannel.appendLine('ℹ️  Industry Standard MCP Configuration Available:');
+            outputChannel.appendLine('   You can configure AWX MCP server directly in VS Code settings');
+            outputChannel.appendLine('   See: MCP_COPILOT_SETUP.md for instructions');
+            outputChannel.appendLine('   This extension provides optional UI enhancements only');
+            outputChannel.appendLine('');
+            return;
+        }
+        
         const mcpServers = config.get<{[key: string]: any}>('github.copilot.chat.mcpServers') || {};
+        
+        // Check if user has already configured AWX MCP manually (any variation)
+        const existingAwxConfig = Object.keys(mcpServers).find(key => 
+            key.toLowerCase().includes('awx') || 
+            (mcpServers[key].command && 
+             mcpServers[key].args && 
+             mcpServers[key].args.some((arg: string) => arg.includes('awx_mcp_server')))
+        );
+        
+        if (existingAwxConfig) {
+            outputChannel.appendLine(`✓ AWX MCP Server already configured as "${existingAwxConfig}"`);
+            outputChannel.appendLine('  Using your manual configuration (Industry Standard pattern)');
+            outputChannel.appendLine('  Extension providing UI enhancements only');
+            outputChannel.appendLine('');
+            return;
+        }
         
         // Get Python path and extension details
         const awxConfig = vscode.workspace.getConfiguration('awx-mcp');
         const pythonPath = awxConfig.get<string>('pythonPath') || 'python';
         const logLevel = awxConfig.get<string>('logLevel') || 'info';
         
-        // Check if AWX MCP server is already configured
-        if (mcpServers['awx-mcp']) {
-            outputChannel.appendLine('✓ AWX MCP Server already configured in settings');
-            return;
-        }
-        
-        // Configure AWX MCP server with slot-filling behavior
+        // Auto-configure for convenience (extension mode)
         mcpServers['awx-mcp'] = {
             command: pythonPath,
             args: ['-m', 'awx_mcp_server'],
@@ -37,7 +65,10 @@ export async function configureMcpServer(outputChannel: vscode.OutputChannel): P
         // Update settings
         await config.update('github.copilot.chat.mcpServers', mcpServers, vscode.ConfigurationTarget.Global);
         
-        outputChannel.appendLine('✓ AWX MCP Server configured for GitHub Copilot Chat');
+        outputChannel.appendLine('✓ AWX MCP Server auto-configured (Extension Mode)');
+        outputChannel.appendLine('  Alternative: Configure manually for Industry Standard pattern');
+        outputChannel.appendLine('  See: MCP_COPILOT_SETUP.md');
+        outputChannel.appendLine('');
         outputChannel.appendLine(`  Command: ${pythonPath} -m awx_mcp_server`);
         outputChannel.appendLine(`  Log Level: ${logLevel}`);
         outputChannel.appendLine('');
@@ -79,17 +110,27 @@ export async function configureMcpServer(outputChannel: vscode.OutputChannel): P
         }
         
     } catch (error: any) {
-        outputChannel.appendLine(`⚠ Failed to configure MCP server: ${error.message}`);
-        showManualConfigurationInstructions(outputChannel);
+        outputChannel.appendLine(`ℹ️  Could not configure MCP server automatically: ${error.message}`);
+        outputChannel.appendLine('   The @awx chat participant will work without this configuration');
+        outputChannel.appendLine('');
         
-        vscode.window.showWarningMessage(
-            'Could not auto-configure AWX MCP. Check output channel for manual setup instructions.',
-            'View Output'
-        ).then(selection => {
-            if (selection === 'View Output') {
-                outputChannel.show();
-            }
-        });
+        // Only show manual config if user wants to see it
+        const isConfigError = error.message.includes('not a registered configuration');
+        if (!isConfigError) {
+            showManualConfigurationInstructions(outputChannel);
+        }
+        
+        // Don't show error UI for missing MCP support
+        if (!isConfigError) {
+            vscode.window.showInformationMessage(
+                'AWX MCP chat participant is ready. MCP tools require GitHub Copilot with MCP support.',
+                'View Output'
+            ).then(selection => {
+                if (selection === 'View Output') {
+                    outputChannel.show();
+                }
+            });
+        }
     }
 }
 

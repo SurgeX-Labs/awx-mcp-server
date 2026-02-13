@@ -1,0 +1,164 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/manifest.schema.json",
+  "manifest_version": "0.3",
+  "version": "1.0.0",
+  "name": "awx-mcp-server",
+  "display_name": "AWX MCP Server",
+  "description": "Control AWX/Ansible Tower through the Model Context Protocol. Manage infrastructure automation with natural language.",
+  "long_description": "AWX MCP Server enables AI agents and assistants to interact with AWX/Ansible Tower instances through the Model Context Protocol. Execute playbooks, manage inventories, monitor jobs, and automate infrastructure tasks using natural language with GitHub Copilot, Claude, Cursor, or any MCP-compatible client.",
+  "author": {
+    "name": "SurgeX Labs",
+    "email": "support@surgexlabs.com",
+    "url": "https://github.com/SurgeX-Labs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SurgeX-Labs/awx-mcp-server"
+  },
+  "homepage": "https://github.com/SurgeX-Labs/awx-mcp-server",
+  "documentation": "https://github.com/SurgeX-Labs/awx-mcp-server/blob/main/README.md",
+  "support": "https://github.com/SurgeX-Labs/awx-mcp-server/issues",
+  "icon": "icon.png",
+  "server": {
+    "type": "python",
+    "entry_point": "awx_mcp_server/__main__.py",
+    "mcp_config": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "${user_config.awx_base_url}",
+        "AWX_TOKEN": "${user_config.awx_token}",
+        "AWX_VERIFY_SSL": "${user_config.awx_verify_ssl}"
+      }
+    }
+  },
+  "keywords": [
+    "awx",
+    "ansible",
+    "tower",
+    "mcp",
+    "automation",
+    "infrastructure",
+    "devops",
+    "copilot",
+    "claude"
+  ],
+  "license": "MIT",
+  "user_config": {
+    "awx_base_url": {
+      "type": "string",
+      "title": "AWX Base URL",
+      "description": "The base URL of your AWX/Ansible Tower instance (e.g., https://awx.example.com)",
+      "required": true
+    },
+    "awx_token": {
+      "type": "string",
+      "title": "AWX API Token",
+      "description": "Your AWX API token for authentication. Generate this in AWX under User Settings > Tokens.",
+      "secret": true,
+      "required": false
+    },
+    "awx_username": {
+      "type": "string",
+      "title": "AWX Username",
+      "description": "Username for password-based authentication (alternative to token)",
+      "required": false
+    },
+    "awx_password": {
+      "type": "string",
+      "title": "AWX Password",
+      "description": "Password for password-based authentication (alternative to token)",
+      "secret": true,
+      "required": false
+    },
+    "awx_verify_ssl": {
+      "type": "boolean",
+      "title": "Verify SSL Certificates",
+      "description": "Whether to verify SSL certificates when connecting to AWX. Set to false for self-signed certificates.",
+      "default": true
+    }
+  },
+  "capabilities": {
+    "tools": [
+      {
+        "name": "list_job_templates",
+        "description": "List all available job templates in AWX"
+      },
+      {
+        "name": "get_job_template",
+        "description": "Get details of a specific job template"
+      },
+      {
+        "name": "launch_job_template",
+        "description": "Launch a job from a template with optional parameters"
+      },
+      {
+        "name": "list_jobs",
+        "description": "List recent jobs with optional filters (status, limit)"
+      },
+      {
+        "name": "get_job",
+        "description": "Get detailed information about a specific job"
+      },
+      {
+        "name": "get_job_output",
+        "description": "Get stdout/stderr output from a job"
+      },
+      {
+        "name": "cancel_job",
+        "description": "Cancel a running job"
+      },
+      {
+        "name": "list_inventories",
+        "description": "List all inventories in AWX"
+      },
+      {
+        "name": "get_inventory",
+        "description": "Get details of a specific inventory"
+      },
+      {
+        "name": "list_inventory_hosts",
+        "description": "List hosts in an inventory"
+      },
+      {
+        "name": "list_projects",
+        "description": "List all projects in AWX"
+      },
+      {
+        "name": "get_project",
+        "description": "Get details of a specific project"
+      },
+      {
+        "name": "update_project",
+        "description": "Sync/update a project from source control"
+      },
+      {
+        "name": "list_workflow_templates",
+        "description": "List all workflow job templates"
+      },
+      {
+        "name": "launch_workflow",
+        "description": "Launch a workflow job template"
+      },
+      {
+        "name": "list_credentials",
+        "description": "List all credentials in AWX"
+      },
+      {
+        "name": "list_organizations",
+        "description": "List all organizations"
+      },
+      {
+        "name": "get_system_health",
+        "description": "Get AWX system health and metrics"
+      }
+    ]
+  },
+  "tags": [
+    "infrastructure",
+    "automation",
+    "ansible",
+    "devops",
+    "configuration-management"
+  ]
+}
