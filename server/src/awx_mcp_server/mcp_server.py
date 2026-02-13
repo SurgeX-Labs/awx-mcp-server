@@ -22,6 +22,7 @@ from awx_mcp_server.domain import (
 )
 from awx_mcp_server.storage import ConfigManager, CredentialStore
 from awx_mcp_server.utils import analyze_job_failure, configure_logging, get_logger
+from awx_mcp_server import playbook_manager, project_registry
 
 # Initialize logging
 configure_logging()
@@ -568,6 +569,216 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     "job_id": {"type": "number", "description": "Job ID of the failed job to analyze"},
                 },
                 "required": ["job_id"],
+            },
+        ),
+        # ── Local Ansible Development Tools ──
+        Tool(
+            name="create_playbook",
+            description="Create/write/generate an Ansible playbook YAML file locally. Use this when user asks to 'create a playbook', 'write a playbook', 'generate a playbook', 'make a new playbook', or wants to author Ansible YAML content before running it on AWX.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Playbook filename (e.g., 'deploy.yml')"},
+                    "content": {
+                        "description": "Playbook content as YAML string, dict (single play), or list of plays",
+                    },
+                    "workspace": {"type": "string", "description": "Directory to save in (default: ~/.awx-mcp/playbooks)"},
+                    "overwrite": {"type": "boolean", "description": "Overwrite if file exists (default: false)"},
+                },
+                "required": ["name", "content"],
+            },
+        ),
+        Tool(
+            name="validate_playbook",
+            description="Validate/check/lint Ansible playbook syntax using ansible-playbook --syntax-check. Use this when user asks to 'validate playbook', 'check playbook syntax', 'lint playbook', 'verify playbook', or wants to ensure a playbook is syntactically correct before running it.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "playbook": {"type": "string", "description": "Playbook filename or full path"},
+                    "workspace": {"type": "string", "description": "Workspace directory (if playbook is just a name)"},
+                    "inventory": {"type": "string", "description": "Inventory file/path for validation"},
+                },
+                "required": ["playbook"],
+            },
+        ),
+        Tool(
+            name="ansible_playbook",
+            description="Execute/run an Ansible playbook locally for development and testing. Use this when user asks to 'run playbook locally', 'execute playbook', 'test playbook', 'dry-run playbook', or wants to run a playbook in their dev environment before pushing to AWX. Supports check mode (dry-run), extra vars, tags, and host limits.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "playbook": {"type": "string", "description": "Playbook filename or full path"},
+                    "workspace": {"type": "string", "description": "Workspace directory"},
+                    "inventory": {"type": "string", "description": "Inventory file/string (default: localhost)"},
+                    "extra_vars": {"type": "object", "description": "Extra variables dict to pass to playbook"},
+                    "limit": {"type": "string", "description": "Host limit pattern"},
+                    "tags": {"type": "array", "items": {"type": "string"}, "description": "Ansible tags to run"},
+                    "skip_tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to skip"},
+                    "check_mode": {"type": "boolean", "description": "Dry-run mode (--check), default: false"},
+                    "verbose": {"type": "number", "description": "Verbosity level 0-4 (default: 0)"},
+                },
+                "required": ["playbook"],
+            },
+        ),
+        Tool(
+            name="ansible_task",
+            description="Run an ad-hoc Ansible task/module locally. Use this when user asks to 'run ansible module', 'execute ad-hoc task', 'ping hosts', 'run shell command with ansible', 'test ansible module', or wants to run a single Ansible module without a playbook. Defaults to connection=local for localhost.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "module": {"type": "string", "description": "Ansible module name (e.g., 'ping', 'shell', 'copy', 'debug')"},
+                    "args": {"type": "string", "description": "Module arguments string (e.g., 'msg=hello' for debug)"},
+                    "hosts": {"type": "string", "description": "Host pattern (default: localhost)"},
+                    "inventory": {"type": "string", "description": "Inventory file/string"},
+                    "extra_vars": {"type": "object", "description": "Extra variables"},
+                    "connection": {"type": "string", "description": "Connection type (default: local)"},
+                    "become": {"type": "boolean", "description": "Use privilege escalation (sudo)"},
+                },
+                "required": ["module"],
+            },
+        ),
+        Tool(
+            name="ansible_role",
+            description="Execute/run an Ansible role locally by generating a temporary playbook. Use this when user asks to 'run a role', 'execute role', 'test role locally', or wants to apply a specific role from their project without writing a full playbook.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "role": {"type": "string", "description": "Role name or path"},
+                    "hosts": {"type": "string", "description": "Target hosts (default: localhost)"},
+                    "workspace": {"type": "string", "description": "Workspace directory containing roles/"},
+                    "inventory": {"type": "string", "description": "Inventory file/string"},
+                    "extra_vars": {"type": "object", "description": "Extra variables to pass to role"},
+                    "connection": {"type": "string", "description": "Connection type (default: local)"},
+                },
+                "required": ["role"],
+            },
+        ),
+        Tool(
+            name="create_role_structure",
+            description="Scaffold/generate/create an Ansible role directory structure with standard subdirectories (tasks, handlers, templates, files, vars, defaults, meta). Use this when user asks to 'create a role', 'scaffold a role', 'generate role skeleton', 'init role structure', or wants to set up a new role from scratch.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Role name"},
+                    "workspace": {"type": "string", "description": "Workspace where roles/ directory lives"},
+                    "include_dirs": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Subdirectories to include (default: all standard dirs)",
+                    },
+                },
+                "required": ["name"],
+            },
+        ),
+        Tool(
+            name="list_playbooks",
+            description="List/show/display all Ansible playbooks in the workspace or project directory. Use this when user asks to 'list playbooks', 'show my playbooks', 'what playbooks exist', 'find playbooks'.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "workspace": {"type": "string", "description": "Workspace directory to scan (default: ~/.awx-mcp/playbooks)"},
+                },
+            },
+        ),
+        Tool(
+            name="list_roles",
+            description="List/show/display all Ansible roles in the workspace. Use this when user asks to 'list roles', 'show my roles', 'what roles exist'.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "workspace": {"type": "string", "description": "Workspace directory (default: ~/.awx-mcp/playbooks)"},
+                },
+            },
+        ),
+        Tool(
+            name="ansible_inventory",
+            description="List/show Ansible inventory hosts and groups using ansible-inventory. Use this when user asks to 'list inventory hosts', 'show inventory groups', 'display local inventory', 'what hosts are in my inventory file'.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "inventory": {"type": "string", "description": "Inventory file, path, or host list (default: localhost)"},
+                    "workspace": {"type": "string", "description": "Working directory"},
+                },
+            },
+        ),
+        # ── Project Registry Tools ──
+        Tool(
+            name="register_project",
+            description="Register/add a local Ansible project directory for easy reuse. Use this when user asks to 'register project', 'add project', 'set up project', 'configure my ansible project'. Auto-detects git remote URL, inventory, and default playbook.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Project alias name"},
+                    "path": {"type": "string", "description": "Absolute path to project root directory"},
+                    "scm_url": {"type": "string", "description": "Git remote URL (auto-detected if not provided)"},
+                    "scm_branch": {"type": "string", "description": "Git branch (default: main)"},
+                    "inventory": {"type": "string", "description": "Default inventory file relative to project root"},
+                    "default_playbook": {"type": "string", "description": "Default playbook filename"},
+                    "description": {"type": "string", "description": "Project description"},
+                    "set_default": {"type": "boolean", "description": "Set as the default project"},
+                },
+                "required": ["name", "path"],
+            },
+        ),
+        Tool(
+            name="unregister_project",
+            description="Remove/unregister a local Ansible project from the registry. Use when user asks to 'remove project', 'unregister project', 'delete project registration'.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Project alias name to remove"},
+                },
+                "required": ["name"],
+            },
+        ),
+        Tool(
+            name="list_registered_projects",
+            description="List/show all registered local Ansible projects and the default. Use this when user asks to 'list my projects', 'show registered projects', 'what projects are configured'.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+            },
+        ),
+        Tool(
+            name="project_playbooks",
+            description="Discover/find/list playbooks and roles under a registered project root. Use this when user asks to 'show project playbooks', 'find playbooks in project', 'discover playbooks', 'what playbooks does project have', 'list project roles'.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {"type": "string", "description": "Registered project name (uses default if not specified)"},
+                    "project_path": {"type": "string", "description": "Direct path to scan (overrides project_name)"},
+                },
+            },
+        ),
+        Tool(
+            name="project_run_playbook",
+            description="Run a playbook using a registered project's inventory and environment. Use this when user asks to 'run project playbook', 'execute playbook from project', 'test project playbook locally'. Automatically uses the project's configured inventory.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "playbook": {"type": "string", "description": "Playbook filename (relative to project root)"},
+                    "project_name": {"type": "string", "description": "Registered project name (uses default if not provided)"},
+                    "extra_vars": {"type": "object", "description": "Extra variables"},
+                    "limit": {"type": "string", "description": "Host limit pattern"},
+                    "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to run"},
+                    "skip_tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to skip"},
+                    "check_mode": {"type": "boolean", "description": "Dry-run mode (--check)"},
+                    "verbose": {"type": "number", "description": "Verbosity level 0-4"},
+                },
+                "required": ["playbook"],
+            },
+        ),
+        Tool(
+            name="git_push_project",
+            description="Stage, commit, and push project changes to git remote (GitHub/GitLab). Use this when user asks to 'push to git', 'commit and push', 'push playbook changes', 'push project to github', 'publish changes'. After pushing, use awx_project_update to sync AWX.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {"type": "string", "description": "Registered project name (uses default if not provided)"},
+                    "commit_message": {"type": "string", "description": "Git commit message (default: 'Update playbooks via AWX MCP')"},
+                    "branch": {"type": "string", "description": "Branch to push to (default: from project config)"},
+                    "add_all": {"type": "boolean", "description": "Stage all changes with git add -A (default: true)"},
+                },
             },
         ),
     ]
@@ -1187,6 +1398,282 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     for i, fix in enumerate(analysis.suggested_fixes, 1):
                         result += f"{i}. {fix}\n"
                 
+                return [TextContent(type="text", text=result)]
+            
+            # ── Local Ansible Development Tool Handlers ──
+            
+            elif name == "create_playbook":
+                pb_result = playbook_manager.create_playbook(
+                    name=arguments["name"],
+                    content=arguments["content"],
+                    workspace=arguments.get("workspace"),
+                    overwrite=arguments.get("overwrite", False),
+                )
+                if pb_result["status"] == "created":
+                    result = f"✅ Playbook created: {pb_result['name']}\n"
+                    result += f"Path: {pb_result['path']}\n"
+                    result += f"Plays: {pb_result['plays']}\n\n"
+                    result += f"Preview:\n```yaml\n{pb_result['preview']}\n```"
+                else:
+                    result = f"❌ {pb_result['message']}"
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "validate_playbook":
+                val_result = await playbook_manager.validate_playbook(
+                    playbook=arguments["playbook"],
+                    workspace=arguments.get("workspace"),
+                    inventory=arguments.get("inventory"),
+                )
+                if val_result["status"] == "valid":
+                    result = f"✅ Playbook syntax is valid: {val_result['playbook']}\n"
+                    if val_result.get("output"):
+                        result += f"\n{val_result['output']}"
+                elif val_result["status"] == "invalid":
+                    result = f"❌ Playbook has syntax errors: {val_result['playbook']}\n\n"
+                    result += f"Errors:\n{val_result['errors']}"
+                else:
+                    result = f"❌ {val_result['message']}"
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "ansible_playbook":
+                exec_result = await playbook_manager.run_playbook(
+                    playbook=arguments["playbook"],
+                    workspace=arguments.get("workspace"),
+                    inventory=arguments.get("inventory"),
+                    extra_vars=arguments.get("extra_vars"),
+                    limit=arguments.get("limit"),
+                    tags=arguments.get("tags"),
+                    skip_tags=arguments.get("skip_tags"),
+                    check_mode=arguments.get("check_mode", False),
+                    verbose=arguments.get("verbose", 0),
+                )
+                if exec_result["status"] == "error":
+                    result = f"❌ {exec_result['message']}"
+                else:
+                    mode = " (CHECK MODE)" if exec_result.get("check_mode") else ""
+                    status_icon = "✅" if exec_result["status"] == "successful" else "❌"
+                    result = f"{status_icon} Playbook execution{mode}: {exec_result['status']}\n"
+                    result += f"Playbook: {exec_result['playbook']}\n\n"
+                    result += f"Output:\n{exec_result['stdout']}"
+                    if exec_result.get("stderr"):
+                        result += f"\n\nStderr:\n{exec_result['stderr']}"
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "ansible_task":
+                task_result = await playbook_manager.run_adhoc_task(
+                    module=arguments["module"],
+                    args=arguments.get("args"),
+                    hosts=arguments.get("hosts", "localhost"),
+                    inventory=arguments.get("inventory"),
+                    extra_vars=arguments.get("extra_vars"),
+                    connection=arguments.get("connection", "local"),
+                    become=arguments.get("become", False),
+                )
+                if task_result["status"] == "error":
+                    result = f"❌ {task_result['message']}"
+                else:
+                    status_icon = "✅" if task_result["status"] == "successful" else "❌"
+                    result = f"{status_icon} Ad-hoc task: {task_result['module']} on {task_result['hosts']}\n\n"
+                    result += f"Output:\n{task_result['stdout']}"
+                    if task_result.get("stderr"):
+                        result += f"\n\nStderr:\n{task_result['stderr']}"
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "ansible_role":
+                role_result = await playbook_manager.run_role(
+                    role=arguments["role"],
+                    hosts=arguments.get("hosts", "localhost"),
+                    workspace=arguments.get("workspace"),
+                    inventory=arguments.get("inventory"),
+                    extra_vars=arguments.get("extra_vars"),
+                    connection=arguments.get("connection", "local"),
+                )
+                if role_result["status"] == "error":
+                    result = f"❌ {role_result['message']}"
+                else:
+                    status_icon = "✅" if role_result["status"] == "successful" else "❌"
+                    result = f"{status_icon} Role execution: {role_result['role']} - {role_result['status']}\n\n"
+                    result += f"Output:\n{role_result['stdout']}"
+                    if role_result.get("stderr"):
+                        result += f"\n\nStderr:\n{role_result['stderr']}"
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "create_role_structure":
+                role_result = playbook_manager.create_role_structure(
+                    name=arguments["name"],
+                    workspace=arguments.get("workspace"),
+                    include_dirs=arguments.get("include_dirs"),
+                )
+                if role_result["status"] == "created":
+                    result = f"✅ Role scaffolded: {role_result['role']}\n"
+                    result += f"Path: {role_result['path']}\n"
+                    result += f"Directories: {', '.join(role_result['directories'])}\n\n"
+                    result += "Files created:\n"
+                    for f in role_result["files"]:
+                        result += f"  - {f}\n"
+                else:
+                    result = f"❌ {role_result['message']}"
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "list_playbooks":
+                pb_result = playbook_manager.list_playbooks(
+                    workspace=arguments.get("workspace"),
+                )
+                result = f"Playbooks in {pb_result['workspace']} ({pb_result['count']}):\n\n"
+                for pb in pb_result["playbooks"]:
+                    plays_info = f" ({pb['plays']} plays)" if pb.get("plays") else ""
+                    result += f"  📄 {pb['name']}{plays_info} - {pb['size']} bytes\n"
+                if not pb_result["playbooks"]:
+                    result += "  (none found)\n"
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "list_roles":
+                roles_result = playbook_manager.list_roles(
+                    workspace=arguments.get("workspace"),
+                )
+                result = f"Roles in {roles_result['workspace']} ({roles_result['count']}):\n\n"
+                for role in roles_result["roles"]:
+                    result += f"  📁 {role['name']} - dirs: {', '.join(role['directories'])}\n"
+                if not roles_result["roles"]:
+                    result += "  (none found)\n"
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "ansible_inventory":
+                inv_result = await playbook_manager.ansible_inventory_list(
+                    inventory=arguments.get("inventory", "localhost,"),
+                    workspace=arguments.get("workspace"),
+                )
+                if inv_result["status"] == "success":
+                    data = inv_result["data"]
+                    if isinstance(data, dict):
+                        import json as _json
+                        result = f"Inventory: {inv_result['inventory']}\n\n"
+                        result += _json.dumps(data, indent=2, default=str)
+                    else:
+                        result = str(data)
+                else:
+                    result = f"❌ {inv_result['message']}"
+                return [TextContent(type="text", text=result)]
+            
+            # ── Project Registry Tool Handlers ──
+            
+            elif name == "register_project":
+                reg_result = project_registry.register_project(
+                    name=arguments["name"],
+                    path=arguments["path"],
+                    scm_url=arguments.get("scm_url"),
+                    scm_branch=arguments.get("scm_branch"),
+                    inventory=arguments.get("inventory"),
+                    default_playbook=arguments.get("default_playbook"),
+                    description=arguments.get("description"),
+                    set_default=arguments.get("set_default", False),
+                )
+                if reg_result["status"] == "registered":
+                    proj = reg_result["project"]
+                    result = f"✅ Project registered: {proj['name']}\n"
+                    result += f"Path: {proj['path']}\n"
+                    if proj.get("scm_url"):
+                        result += f"SCM: {proj['scm_url']} ({proj['scm_branch']})\n"
+                    if proj.get("inventory"):
+                        result += f"Inventory: {proj['inventory']}\n"
+                    if proj.get("default_playbook"):
+                        result += f"Default playbook: {proj['default_playbook']}\n"
+                    if reg_result.get("is_default"):
+                        result += "⭐ Set as default project\n"
+                else:
+                    result = f"❌ {reg_result['message']}"
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "unregister_project":
+                unreg_result = project_registry.unregister_project(
+                    name=arguments["name"],
+                )
+                if unreg_result["status"] == "removed":
+                    result = f"✅ Project '{unreg_result['project']}' removed from registry"
+                else:
+                    result = f"❌ {unreg_result['message']}"
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "list_registered_projects":
+                proj_result = project_registry.list_projects()
+                result = f"Registered Projects ({proj_result['count']}):\n\n"
+                for proj in proj_result["projects"]:
+                    default_marker = " ⭐" if proj.get("is_default") else ""
+                    exists_marker = "" if proj.get("exists") else " ⚠️ (path not found)"
+                    result += f"📂 {proj['name']}{default_marker}{exists_marker}\n"
+                    result += f"   Path: {proj['path']}\n"
+                    if proj.get("scm_url"):
+                        result += f"   SCM: {proj['scm_url']} ({proj.get('scm_branch', 'main')})\n"
+                    if proj.get("inventory"):
+                        result += f"   Inventory: {proj['inventory']}\n"
+                    result += f"   Playbooks: {proj.get('playbook_count', 0)}\n\n"
+                if not proj_result["projects"]:
+                    result += "  (none registered)\n"
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "project_playbooks":
+                disc_result = project_registry.discover_playbooks(
+                    project_name=arguments.get("project_name"),
+                    project_path=arguments.get("project_path"),
+                )
+                if disc_result.get("status") == "error":
+                    result = f"❌ {disc_result['message']}"
+                else:
+                    result = f"Project: {disc_result['project_root']}\n\n"
+                    result += f"Playbooks ({disc_result['playbook_count']}):\n"
+                    for pb in disc_result["playbooks"]:
+                        result += f"  📄 {pb['relative_path']} ({pb['plays']} plays, hosts: {pb['hosts']})\n"
+                    if not disc_result["playbooks"]:
+                        result += "  (none found)\n"
+                    result += f"\nRoles ({disc_result['role_count']}):\n"
+                    for role in disc_result["roles"]:
+                        result += f"  📁 {role['name']} - {', '.join(role['directories'])}\n"
+                    if not disc_result["roles"]:
+                        result += "  (none found)\n"
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "project_run_playbook":
+                run_result = await project_registry.project_run_playbook(
+                    playbook=arguments["playbook"],
+                    project_name=arguments.get("project_name"),
+                    extra_vars=arguments.get("extra_vars"),
+                    limit=arguments.get("limit"),
+                    tags=arguments.get("tags"),
+                    skip_tags=arguments.get("skip_tags"),
+                    check_mode=arguments.get("check_mode", False),
+                    verbose=arguments.get("verbose", 0),
+                )
+                if run_result.get("status") == "error":
+                    result = f"❌ {run_result['message']}"
+                else:
+                    mode = " (CHECK MODE)" if run_result.get("check_mode") else ""
+                    status_icon = "✅" if run_result["status"] == "successful" else "❌"
+                    result = f"{status_icon} Project playbook execution{mode}: {run_result['status']}\n"
+                    result += f"Project: {run_result.get('project', 'N/A')}\n"
+                    result += f"Playbook: {run_result['playbook']}\n\n"
+                    result += f"Output:\n{run_result['stdout']}"
+                    if run_result.get("stderr"):
+                        result += f"\n\nStderr:\n{run_result['stderr']}"
+                return [TextContent(type="text", text=result)]
+            
+            elif name == "git_push_project":
+                push_result = await project_registry.git_push_project(
+                    project_name=arguments.get("project_name"),
+                    commit_message=arguments.get("commit_message"),
+                    branch=arguments.get("branch"),
+                    add_all=arguments.get("add_all", True),
+                )
+                if push_result["status"] == "pushed":
+                    result = f"✅ Changes pushed to git!\n"
+                    result += f"Project: {push_result['project']}\n"
+                    result += f"Branch: {push_result['branch']}\n"
+                    result += f"Commit: {push_result['message']}\n\n"
+                    result += push_result["output"]
+                    result += "\n\n💡 Next: Use 'awx_project_update' to sync AWX with the latest changes."
+                elif push_result["status"] == "no_changes":
+                    result = f"ℹ️ {push_result['message']}"
+                else:
+                    result = f"❌ {push_result['message']}"
                 return [TextContent(type="text", text=result)]
             
             else:

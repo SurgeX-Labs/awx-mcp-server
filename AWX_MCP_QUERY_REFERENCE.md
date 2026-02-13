@@ -18,6 +18,11 @@
 10. [Job Execution](#10-job-execution)
 11. [Job Monitoring](#11-job-monitoring)
 12. [Job Diagnostics](#12-job-diagnostics)
+13. [Playbook Development](#13-playbook-development)
+14. [Role Development](#14-role-development)
+15. [Project Registry](#15-project-registry)
+16. [Git / SCM Integration](#16-git--scm-integration)
+17. [Dev-to-AWX Workflow](#17-dev-to-awx-workflow)
 
 ---
 
@@ -372,6 +377,230 @@ help me fix job 7 error
 
 ---
 
+## 13. Playbook Development
+
+### Create Playbook (`create_playbook`)
+```
+create a playbook called deploy.yml with hosts: all and a debug task
+write a playbook named install_nginx.yml
+generate a playbook to install packages on webservers
+create playbook backup.yml to backup /var/data
+make a new hello world playbook
+create playbook site.yml with two plays - setup and deploy
+```
+
+### Validate Playbook Syntax (`validate_playbook`)
+```
+validate playbook deploy.yml
+check syntax of my playbook
+lint playbook install_nginx.yml
+verify playbook is correct
+check playbook deploy.yml for syntax errors
+validate playbook at /home/user/project/site.yml
+```
+
+### Run Playbook Locally (`ansible_playbook`)
+```
+run playbook deploy.yml locally
+execute playbook install_nginx.yml
+test playbook site.yml with check mode
+dry-run playbook deploy.yml
+run playbook with extra vars {"env": "dev"}
+execute playbook limited to "webservers"
+run playbook with tags "setup,install"
+run playbook deploy.yml with verbose output
+```
+
+### Run Ad-Hoc Task (`ansible_task`)
+```
+run ansible ping on localhost
+execute shell command "uptime" on localhost
+run debug module with msg "hello world"
+run ansible copy module to copy a file
+ping all hosts in my inventory
+run shell command "df -h" on webservers
+run setup module to gather facts
+execute ansible command module with "whoami"
+```
+
+### List Playbooks (`list_playbooks`)
+```
+list my playbooks
+show playbooks in workspace
+what playbooks do I have
+list all local playbooks
+show playbooks in /home/user/project
+```
+
+### List Local Inventory (`ansible_inventory`)
+```
+list inventory hosts
+show inventory groups
+display my local inventory
+what hosts are in inventory.ini
+show inventory from hosts.yml
+```
+
+---
+
+## 14. Role Development
+
+### Create Role Structure (`create_role_structure`)
+```
+create a role called webserver
+scaffold role nginx
+generate role skeleton for database
+init a new role called monitoring
+create role "common" with tasks, handlers, and defaults only
+```
+
+### Run Role Locally (`ansible_role`)
+```
+run role webserver locally
+execute role nginx on localhost
+test role database
+apply role common to localhost
+run role monitoring with extra vars {"port": 9090}
+```
+
+### List Roles (`list_roles`)
+```
+list my roles
+show roles in workspace
+what roles do I have
+show all local roles
+```
+
+---
+
+## 15. Project Registry
+
+### Register Project (`register_project`)
+```
+register project "my-app" at /home/user/ansible-project
+add project "infra" from /opt/ansible/infrastructure
+register project "deploy" with git URL https://github.com/org/deploy.git
+set up project at current directory
+configure my ansible project
+register project and set as default
+```
+
+### Unregister Project (`unregister_project`)
+```
+unregister project my-app
+remove project infra from registry
+delete project registration for deploy
+```
+
+### List Registered Projects (`list_registered_projects`)
+```
+list my projects
+show registered projects
+what projects are configured
+list all local ansible projects
+show project registry
+```
+
+### Discover Project Playbooks (`project_playbooks`)
+```
+show project playbooks
+find playbooks in project my-app
+discover playbooks in my project
+what playbooks does project infra have
+list roles in project my-app
+scan project for playbooks and roles
+```
+
+### Run Project Playbook (`project_run_playbook`)
+```
+run site.yml from project my-app
+execute deploy.yml from project infra
+test project playbook with check mode
+run project playbook with extra vars
+run project my-app playbook install.yml limited to "webservers"
+```
+
+---
+
+## 16. Git / SCM Integration
+
+### Push to Git (`git_push_project`)
+```
+push project to github
+commit and push changes
+push playbook changes to git
+push project my-app to remote
+push with message "Add nginx playbook"
+commit all changes and push to main branch
+push project to gitlab
+publish my changes
+```
+
+---
+
+## 17. Dev-to-AWX Workflow
+
+These multi-step workflows demonstrate the full development cycle:
+
+### Write → Validate → Test → Push → AWX
+```
+# Step 1: Create a playbook
+create a playbook called deploy_app.yml that installs nginx and deploys my app
+
+# Step 2: Validate syntax
+validate playbook deploy_app.yml
+
+# Step 3: Test locally (dry-run)
+run playbook deploy_app.yml in check mode
+
+# Step 4: Test locally (real)
+run playbook deploy_app.yml locally
+
+# Step 5: Push to git
+push project changes with message "Add deploy_app playbook"
+
+# Step 6: Sync AWX project
+update AWX project 1 from SCM
+
+# Step 7: Launch on AWX
+launch job template 3
+```
+
+### Role Development Workflow
+```
+# Step 1: Scaffold
+create role webserver
+
+# Step 2: Test locally
+run role webserver on localhost
+
+# Step 3: Push & sync
+push to git and then update AWX project 1
+
+# Step 4: Run via AWX template
+launch job template that uses the webserver role
+```
+
+### Register → Discover → Run → Push
+```
+# Register an existing project
+register project "infra" at C:\Users\me\ansible-infra
+
+# See what's in it
+show project playbooks for infra
+
+# Test a playbook
+run site.yml from project infra in check mode
+
+# Push changes
+push project infra to github with message "Update configs"
+
+# Sync with AWX
+update AWX project from SCM
+```
+
+---
+
 ## Combined / Multi-Step Queries
 
 These queries may trigger multiple tool calls:
@@ -449,3 +678,18 @@ list projects and show templates for project 1
 | `awx_job_stdout` | Diagnostics | View job console output/logs |
 | `awx_job_events` | Diagnostics | View job events/tasks |
 | `awx_job_failure_summary` | Diagnostics | Analyze job failure with fix suggestions |
+| `create_playbook` | Playbook Dev | Create Ansible playbook from YAML |
+| `validate_playbook` | Playbook Dev | Validate playbook syntax (--syntax-check) |
+| `ansible_playbook` | Playbook Dev | Execute playbook locally |
+| `ansible_task` | Playbook Dev | Run ad-hoc Ansible task/module |
+| `ansible_role` | Role Dev | Execute a role via temp playbook |
+| `create_role_structure` | Role Dev | Scaffold role directory tree |
+| `list_playbooks` | Playbook Dev | List playbooks in workspace |
+| `list_roles` | Role Dev | List roles in workspace |
+| `ansible_inventory` | Playbook Dev | List inventory hosts/groups |
+| `register_project` | Project Registry | Register local Ansible project |
+| `unregister_project` | Project Registry | Remove project from registry |
+| `list_registered_projects` | Project Registry | Show all registered projects |
+| `project_playbooks` | Project Registry | Discover playbooks in project |
+| `project_run_playbook` | Project Registry | Run playbook from registered project |
+| `git_push_project` | Git/SCM | Commit and push project to git remote |
