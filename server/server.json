@@ -3,6 +3,7 @@
   "displayName": "AWX MCP Server",
   "description": "Control AWX/Ansible Tower through the Model Context Protocol. Manage infrastructure automation with natural language.",
   "version": "1.1.0",
+  "icon": "icon.png",
   "author": {
     "name": "SurgeX Labs",
     "email": "support@surgexlabs.com",

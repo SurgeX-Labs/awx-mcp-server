@@ -1,0 +1,25 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Simplified gear icon optimized for activity bar -->
+  <g transform="translate(16,16)">
+    <!-- Outer gear teeth (8 teeth) -->
+    <path d="M 0,-12 L 2,-10 L 2,-8 L 0,-8 
+             M 8,0 L 10,-2 L 12,0 L 10,2 
+             M 0,8 L 2,8 L 2,10 L 0,12 
+             M -12,0 L -10,2 L -8,0 L -10,-2 Z
+             M 5.7,-5.7 L 7.7,-3.7 L 8.5,-4.5 L 6.5,-6.5 Z
+             M 5.7,5.7 L 6.5,6.5 L 8.5,4.5 L 7.7,3.7 Z
+             M -5.7,5.7 L -7.7,3.7 L -8.5,4.5 L -6.5,6.5 Z
+             M -5.7,-5.7 L -6.5,-6.5 L -8.5,-4.5 L -7.7,-3.7 Z" 
+          fill="#EE0000" stroke="#EE0000" stroke-width="0.5"/>
+    
+    <!-- Inner circle -->
+    <circle cx="0" cy="0" r="6" fill="#EE0000"/>
+    
+    <!-- Center hole -->
+    <circle cx="0" cy="0" r="3" fill="#1E1E1E" stroke="#EE0000" stroke-width="0.5"/>
+    
+    <!-- AWX branding (simplified A) -->
+    <path d="M -1,0 L 0,-2 L 1,0 M -0.5,-0.5 L 0.5,-0.5" 
+          stroke="#FFFFFF" stroke-width="0.8" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>

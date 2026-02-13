@@ -4,15 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "awx-mcp-server"
-version = "1.0.0"
-description = "Remote AWX MCP Server with FastAPI"
+version = "1.1.0"
+description = "AWX MCP Server - Control AWX/Ansible Tower through the Model Context Protocol"
 requires-python = ">=3.10"
 authors = [
-    {name = "AWX MCP Team"}
+    {name = "SurgeX Labs", email = "support@surgexlabs.com"}
 ]
 readme = "README.md"
 license = {text = "MIT"}
-keywords = ["awx", "ansible", "mcp", "automation", "fastapi"]
+keywords = ["awx", "ansible", "mcp", "automation", "model-context-protocol", "github-copilot", "claude"]
+
+[project.urls]
+Homepage = "https://github.com/SurgeX-Labs/awx-mcp-server"
+Repository = "https://github.com/SurgeX-Labs/awx-mcp-server.git"
+Issues = "https://github.com/SurgeX-Labs/awx-mcp-server/issues"
+Documentation = "https://github.com/SurgeX-Labs/awx-mcp-server/blob/main/README.md"
+
+[tool.mcp]
+name = "io.github.SurgeX-Labs/awx-mcp-server"
 
 dependencies = [
     "fastapi>=0.109.0",
