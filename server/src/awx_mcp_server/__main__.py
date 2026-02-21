@@ -7,7 +7,7 @@ import asyncio
 import sys
 from awx_mcp_server.mcp_server import main
 
-__version__ = "1.1.4"
+__version__ = "1.1.6"
 
 if __name__ == "__main__":
     # Handle --version flag
@@ -25,10 +25,11 @@ if __name__ == "__main__":
         print("\nMCP Server Mode (default):")
         print("  Starts STDIO server for MCP client communication")
         print("\nEnvironment Variables:")
-        print("  AWX_BASE_URL      AWX instance URL (required)")
-        print("  AWX_TOKEN         AWX API token")
-        print("  AWX_USERNAME      AWX username (alternative to token)")
-        print("  AWX_PASSWORD      AWX password (alternative to token)")
+        print("  AWX_BASE_URL      AWX/AAP instance URL (required)")
+        print("  AWX_TOKEN         AWX/AAP API token")
+        print("  AWX_USERNAME      AWX/AAP username (alternative to token)")
+        print("  AWX_PASSWORD      AWX/AAP password (alternative to token)")
+        print("  AWX_PLATFORM      Platform type: awx (default), aap, or tower")
         print("  AWX_VERIFY_SSL    Verify SSL certificates (default: true)")
         print("  LOG_LEVEL         Logging level (debug|info|warning|error)")
         sys.exit(0)

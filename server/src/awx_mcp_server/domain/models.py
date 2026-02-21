@@ -8,6 +8,14 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 
+class PlatformType(str, Enum):
+    """Automation platform type."""
+
+    AWX = "awx"  # Open source AWX
+    AAP = "aap"  # Ansible Automation Platform (Red Hat)
+    TOWER = "tower"  # Legacy Ansible Tower (now AAP)
+
+
 class JobStatus(str, Enum):
     """AWX job status."""
 
@@ -34,11 +42,12 @@ class FailureCategory(str, Enum):
 
 
 class EnvironmentConfig(BaseModel):
-    """AWX environment configuration (no secrets)."""
+    """Environment configuration for AWX/AAP/Tower (no secrets)."""
 
     env_id: UUID = Field(default_factory=uuid4)
     name: str = Field(..., min_length=1, max_length=100)
     base_url: HttpUrl
+    platform_type: PlatformType = PlatformType.AWX  # Default to AWX for backward compatibility
     verify_ssl: bool = True
     is_default: bool = False
     

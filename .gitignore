@@ -48,6 +48,15 @@ dmypy.json
 
 # Environment
 .env
+
+# Secrets and tokens
+.mcpregistry_github_token
+.mcpregistry_registry_token
+*.token
+*.key
+
+# Publisher executables
+mcp-publisher.exe
 .env.local
 *.local
 

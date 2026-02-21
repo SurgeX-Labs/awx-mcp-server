@@ -1,0 +1,305 @@
+# Vault Integration Configuration Template
+#
+# This is a placeholder configuration file for future vault integration.
+# Status: Not Yet Implemented - Coming in v2.0.0
+#
+# Copy this to: config/vault-config.yaml
+# Uncomment and configure the provider you want to use
+
+# ============================================================================
+# Provider Selection
+# ============================================================================
+# Choose one vault provider
+# provider: hashicorp_vault
+# provider: aws_secrets_manager
+# provider: azure_key_vault
+# provider: google_secret_manager
+# provider: kubernetes_secrets
+# provider: github_secrets
+# provider: cyberark
+# provider: onepassword
+
+# ============================================================================
+# HashiCorp Vault Configuration
+# ============================================================================
+hashicorp_vault:
+  # Vault server address
+  address: "https://vault.company.com:8200"
+  
+  # Optional namespace
+  namespace: ""  # e.g., "awx" for Vault Enterprise
+  
+  # Authentication method: kubernetes, token, approle, ldap, aws, azure, gcp
+  auth_method: "kubernetes"
+  
+  # Kubernetes authentication (recommended for K8s deployments)
+  kubernetes:
+    role: "awx-mcp-server"
+    service_account_token_path: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  
+  # Token authentication (for development only)
+  # token:
+  #   token: "s.XXXXXXXXXXXXXXXXXXXX"
+  #   token_path: "/vault/secrets/token"
+  
+  # AppRole authentication (for non-K8s deployments)
+  # approle:
+  #   role_id: "your-role-id"
+  #   role_id_path: "/vault/secrets/role-id"
+  #   secret_id: "your-secret-id"
+  #   secret_id_path: "/vault/secrets/secret-id"
+  
+  # LDAP authentication
+  # ldap:
+  #   username: "awx-service"
+  #   password_path: "/vault/secrets/ldap-password"
+  
+  # Secret storage configuration
+  secret_engine: "kv-v2"  # or "kv-v1"
+  secret_path_template: "secret/awx/{environment}/{user_id}"
+  
+  # Fields in the secret
+  field_mapping:
+    awx_url: "awx_url"
+    awx_token: "awx_token"
+    awx_username: "awx_username"
+    awx_password: "awx_password"
+  
+  # Caching (optional)
+  cache_ttl: 300  # seconds
+  
+  # TLS configuration
+  tls_verify: true
+  ca_cert_path: "/etc/ssl/certs/vault-ca.pem"
+  # client_cert_path: "/vault/secrets/client-cert.pem"
+  # client_key_path: "/vault/secrets/client-key.pem"
+
+# ============================================================================
+# AWS Secrets Manager Configuration
+# ============================================================================
+aws_secrets_manager:
+  # AWS region
+  region: "us-east-1"
+  
+  # Secret name template
+  # Variables: {environment}, {user_id}
+  secret_name_template: "awx/{environment}/{user_id}"
+  
+  # Authentication (uses IAM role by default)
+  # Or specify credentials explicitly (not recommended)
+  # access_key_id: "AKIAXXXXXXXXXXXXX"
+  # secret_access_key: "xxxxxxxxxxxxxxxxxxxxxxx"
+  
+  # Session token (for temporary credentials)
+  # session_token: ""
+  
+  # Field mapping in JSON secret
+  field_mapping:
+    awx_url: "awx_url"
+    awx_token: "awx_token"
+  
+  # Caching
+  cache_ttl: 300
+
+# ============================================================================
+# Azure Key Vault Configuration
+# ============================================================================
+azure_key_vault:
+  # Key Vault URL
+  vault_url: "https://company.vault.azure.net"
+  
+  # Secret name template
+  # Note: Azure Key Vault names must be alphanumeric and hyphens only
+  secret_name_template: "awx-{environment}-{user-id}"
+  
+  # Authentication (uses managed identity by default)
+  # Or specify service principal
+  # client_id: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  # client_secret: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  # tenant_id: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  
+  # Field mapping
+  field_mapping:
+    awx_url: "awxUrl"
+    awx_token: "awxToken"
+  
+  # Caching
+  cache_ttl: 300
+
+# ============================================================================
+# Google Secret Manager Configuration
+# ============================================================================
+google_secret_manager:
+  # GCP project ID
+  project_id: "my-project-id"
+  
+  # Secret name template
+  secret_name_template: "awx-{environment}-{user_id}"
+  
+  # Authentication (uses workload identity by default)
+  # Or specify service account key
+  # service_account_path: "/secrets/gcp-sa.json"
+  
+  # Field mapping
+  field_mapping:
+    awx_url: "awx_url"
+    awx_token: "awx_token"
+  
+  # Caching
+  cache_ttl: 300
+
+# ============================================================================
+# Kubernetes Secrets Configuration
+# ============================================================================
+kubernetes_secrets:
+  # Namespace where secrets are stored
+  namespace: "awx-mcp"
+  
+  # Secret name template
+  secret_name_template: "awx-creds-{user-id}"
+  
+  # Data keys in the secret
+  field_mapping:
+    awx_url: "awx-url"
+    awx_token: "awx-token"
+  
+  # In-cluster configuration (default: true)
+  in_cluster: true
+  
+  # Or specify kubeconfig path
+  # kubeconfig_path: "/home/user/.kube/config"
+
+# ============================================================================
+# GitHub Secrets Configuration
+# ============================================================================
+github_secrets:
+  # Repository
+  owner: "company"
+  repository: "awx-mcp-config"
+  
+  # Environment (optional)
+  environment: "production"
+  
+  # Secret name template
+  secret_name_template: "AWX_{ENVIRONMENT}_{USER_ID}"
+  
+  # Authentication
+  app_id: "123456"
+  private_key_path: "/secrets/github-app.pem"
+  
+  # Or use personal access token
+  # personal_access_token: "ghp_xxxxxxxxxxxxxxxxxxxx"
+
+# ============================================================================
+# CyberArk Configuration
+# ============================================================================
+cyberark:
+  # CyberArk base URL
+  base_url: "https://cyberark.company.com"
+  
+  # Application ID
+  app_id: "awx-mcp-server"
+  
+  # Safe name
+  safe: "AWX_Credentials"
+  
+  # Object name template
+  object_name_template: "{environment}_{user_id}"
+  
+  # Authentication
+  api_key_path: "/secrets/cyberark-api.key"
+  
+  # Or certificate-based auth
+  # certificate_path: "/secrets/cyberark-cert.pem"
+  # certificate_key_path: "/secrets/cyberark-key.pem"
+  
+  # Field mapping
+  field_mapping:
+    awx_url: "Address"
+    awx_token: "Password"
+
+# ============================================================================
+# 1Password Secrets Automation Configuration
+# ============================================================================
+onepassword:
+  # Service account token path
+  service_account_token_path: "/secrets/1password-sa-token"
+  
+  # Or specify token directly (not recommended)
+  # service_account_token: "ops_xxxxxxxxxxxxxxxxxxxxxx"
+  
+  # Vault name
+  vault: "AWX Credentials"
+  
+  # Item name template
+  item_name_template: "{environment}-{user_id}"
+  
+  # Field mapping
+  field_mapping:
+    awx_url: "awx_url"
+    awx_token: "credential"
+
+# ============================================================================
+# User Identification
+# ============================================================================
+user_mapping:
+  # How to identify users from MCP requests
+  # Options: header, jwt, certificate, static
+  user_id_source: "header"
+  
+  # Header name if using header-based identification
+  user_id_header: "X-User-ID"
+  
+  # JWT configuration if using JWT-based identification
+  jwt:
+    issuer: "https://auth.company.com"
+    audience: "awx-mcp-server"
+    public_key_path: "/secrets/jwt-public.pem"
+    user_id_claim: "email"
+  
+  # Certificate configuration if using mTLS
+  certificate:
+    user_id_field: "CN"  # or "emailAddress"
+  
+  # Static user for testing
+  static:
+    user_id: "default"
+
+# ============================================================================
+# Environment Configuration
+# ============================================================================
+environment_mapping:
+  # Default environment if not specified
+  default: "production"
+  
+  # Allowed environments
+  allowed_environments:
+    - development
+    - staging
+    - production
+  
+  # Environment aliases
+  aliases:
+    dev: development
+    stg: staging
+    prod: production
+
+# ============================================================================
+# Global Settings
+# ============================================================================
+global:
+  # Enable/disable vault integration
+  enabled: false  # Set to true when ready to use
+  
+  # Fallback to client-provided credentials if vault fails
+  fallback_to_client_credentials: true
+  
+  # Audit logging
+  audit_logging:
+    enabled: true
+    log_path: "/var/log/awx-mcp/vault-audit.log"
+  
+  # Metrics
+  metrics:
+    enabled: true
+    prometheus_port: 9090

@@ -1,0 +1,280 @@
+{
+  "$schema": "https://code.visualstudio.com/schemas/settings/machine.json",
+  "description": "AWX MCP Server - VS Code Configuration Examples",
+  
+  "// ==========================================================================": "",
+  "// SINGLE USER MODE - Local Installation": "",
+  "// ==========================================================================": "",
+  
+  "github.copilot.chat.mcpServers": {
+    
+    "// ======================================================================": "",
+    "// Option 1: Single AWX Environment (Simplest)": "",
+    "// ======================================================================": "",
+    "awx-local": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "https://awx.example.com",
+        "AWX_TOKEN": "${secret:awx-token}",
+        "AWX_VERIFY_SSL": "true",
+        "LOG_LEVEL": "info"
+      }
+    },
+    
+    "// ======================================================================": "",
+    "// Option 2: Multiple AWX Environments (Development + Production)": "",
+    "// ======================================================================": "",
+    "awx-dev": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "https://awx-dev.example.com",
+        "AWX_TOKEN": "${secret:awx-dev-token}",
+        "AWX_ENVIRONMENT": "development",
+        "AWX_VERIFY_SSL": "false",
+        "LOG_LEVEL": "debug"
+      }
+    },
+    
+    "awx-staging": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "https://awx-staging.example.com",
+        "AWX_TOKEN": "${secret:awx-staging-token}",
+        "AWX_ENVIRONMENT": "staging"
+      }
+    },
+    
+    "awx-prod": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "https://awx-prod.example.com",
+        "AWX_TOKEN": "${secret:awx-prod-token}",
+        "AWX_ENVIRONMENT": "production",
+        "LOG_LEVEL": "warning"
+      }
+    },
+    
+    "// ======================================================================": "",
+    "// Option 3: Username/Password Authentication (Alternative to Token)": "",
+    "// ======================================================================": "",
+    "awx-userpass": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "https://awx.example.com",
+        "AWX_USERNAME": "automation",
+        "AWX_PASSWORD": "${secret:awx-password}"
+      }
+    },
+    
+    "// ==========================================================================": "",
+    "// TEAM/ENTERPRISE MODE - Remote Server": "",
+    "// ==========================================================================": "",
+    
+    "// ======================================================================": "",
+    "// Option 4: Remote Server with Client-Provided Credentials (Recommended)": "",
+    "// ======================================================================": "",
+    "awx-remote": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-sse",
+        "https://awx-mcp.company.com"
+      ],
+      "env": {
+        "// Credentials sent to remote server for each session": "",
+        "AWX_BASE_URL": "https://awx.example.com",
+        "AWX_TOKEN": "${secret:awx-token}",
+        "AWX_ENVIRONMENT": "production",
+        
+        "// Optional: User identification": "",
+        "USER_ID": "john.doe@company.com"
+      }
+    },
+    
+    "// ======================================================================": "",
+    "// Option 5: Remote Server - Multiple Environments": "",
+    "// ======================================================================": "",
+    "awx-remote-dev": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-sse",
+        "https://awx-mcp.company.com"
+      ],
+      "env": {
+        "AWX_BASE_URL": "https://awx-dev.example.com",
+        "AWX_TOKEN": "${secret:awx-dev-token}",
+        "AWX_ENVIRONMENT": "development",
+        "USER_ID": "john.doe@company.com"
+      }
+    },
+    
+    "awx-remote-prod": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-sse",
+        "https://awx-mcp.company.com"
+      ],
+      "env": {
+        "AWX_BASE_URL": "https://awx-prod.example.com",
+        "AWX_TOKEN": "${secret:awx-prod-token}",
+        "AWX_ENVIRONMENT": "production",
+        "USER_ID": "john.doe@company.com"
+      }
+    },
+    
+    "// ======================================================================": "",
+    "// Option 6: Remote Server with Vault (Future - Coming in v2.0.0)": "",
+    "// ======================================================================": "",
+    "awx-remote-vault": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-sse",
+        "https://awx-mcp.company.com"
+      ],
+      "env": {
+        "// No AWX credentials needed - retrieved from vault": "",
+        "USER_ID": "john.doe@company.com",
+        "AWX_ENVIRONMENT": "production",
+        
+        "// Optional: Vault authentication": "",
+        "VAULT_TOKEN": "${secret:vault-token}"
+      }
+    },
+    
+    "// ======================================================================": "",
+    "// Option 7: Hybrid - Local with Vault (Future)": "",
+    "// ======================================================================": "",
+    "awx-local-vault": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server", "--vault-mode"],
+      "env": {
+        "USER_ID": "john.doe@company.com",
+        "AWX_ENVIRONMENT": "production",
+        "VAULT_ADDR": "https://vault.company.com",
+        "VAULT_TOKEN": "${secret:vault-token}"
+      }
+    }
+  },
+  
+  "// ==========================================================================": "",
+  "// STORING SECRETS IN VS CODE": "",
+  "// ==========================================================================": "",
+  "// To store a secret (like AWX token):": "",
+  "// 1. Press Ctrl+Shift+P (Windows/Linux) or Cmd+Shift+P (Mac)": "",
+  "// 2. Type 'GitHub: Store Secret'": "",
+  "// 3. Enter secret name (e.g., 'awx-token')": "",
+  "// 4. Enter secret value (your AWX API token)": "",
+  "// 5. Secret is now stored securely and referenced as ${secret:awx-token}": "",
+  "//": "",
+  "// Secret names you might need:": "",
+  "// - awx-token: Your AWX API token": "",
+  "// - awx-dev-token: Development AWX token": "",
+  "// - awx-staging-token: Staging AWX token": "",
+  "// - awx-prod-token: Production AWX token": "",
+  "// - awx-password: Your AWX password (if using username/password)": "",
+  "// - vault-token: Vault token (future, for vault integration)": "",
+  
+  "// ==========================================================================": "",
+  "// SWITCHING BETWEEN ENVIRONMENTS": "",
+  "// ==========================================================================": "",
+  "// In GitHub Copilot Chat:": "",
+  "// 1. Click the MCP server selector dropdown": "",
+  "// 2. Choose the environment you want:": "",
+  "//    - 'awx-local' - Your local AWX": "",
+  "//    - 'awx-dev' - Development AWX": "",
+  "//    - 'awx-staging' - Staging AWX": "",
+  "//    - 'awx-prod' - Production AWX": "",
+  "//    - 'awx-remote' - Remote shared server": "",
+  "//": "",
+  "// Then use natural language as usual:": "",
+  "// - 'list AWX jobs'": "",
+  "// - 'launch job template 1'": "",
+  "// - 'show failed jobs'": "",
+  
+  "// ==========================================================================": "",
+  "// GETTING YOUR AWX API TOKEN": "",
+  "// ==========================================================================": "",
+  "// 1. Log in to your AWX instance": "",
+  "// 2. Click your username (top right) → Token": "",
+  "// 3. Click 'Add' button": "",
+  "// 4. Set Application and Scope (Read + Write recommended)": "",
+  "// 5. Click 'Save'": "",
+  "// 6. Copy the token immediately (shown only once!)": "",
+  "// 7. Store it in VS Code secrets (see above)": "",
+  
+  "// ==========================================================================": "",
+  "// TROUBLESHOOTING": "",
+  "// ==========================================================================": "",
+  "// Problem: 'python' command not found": "",
+  "// Solution: Install Python 3.10+ and ensure it's in your PATH": "",
+  "//": "",
+  "// Problem: Module 'awx_mcp_server' not found": "",
+  "// Solution: Run 'pip install awx-mcp-server'": "",
+  "//": "",
+  "// Problem: Connection refused to AWX": "",
+  "// Solution: Check AWX_BASE_URL is correct and AWX is accessible": "",
+  "//": "",
+  "// Problem: Authentication failed": "",
+  "// Solution: Verify your AWX_TOKEN is valid (regenerate if needed)": "",
+  "//": "",
+  "// Problem: SSL certificate verification failed": "",
+  "// Solution: Set AWX_VERIFY_SSL=false (development only!) or install CA cert": "",
+  "//": "",
+  "// Problem: Remote server connection failed": "",
+  "// Solution: Check remote server URL and ensure it's running": "",
+  
+  "// ==========================================================================": "",
+  "// EXAMPLE QUERIES TO TRY": "",
+  "// ==========================================================================": "",
+  "// Once configured, try these in GitHub Copilot Chat (@workspace):": "",
+  "//": "",
+  "// Environment Management:": "",
+  "// - 'list AWX environments'": "",
+  "// - 'test AWX connection'": "",
+  "// - 'show AWX system info'": "",
+  "//": "",
+  "// Job Management:": "",
+  "// - 'list job templates'": "",
+  "// - 'launch job template 1'": "",
+  "// - 'show recent jobs'": "",
+  "// - 'show failed jobs'": "",
+  "// - 'get job 123 output'": "",
+  "// - 'why did job 123 fail'": "",
+  "//": "",
+  "// Inventory:": "",
+  "// - 'list inventories'": "",
+  "// - 'show hosts in inventory 1'": "",
+  "// - 'list inventory groups'": "",
+  "//": "",
+  "// Projects:": "",
+  "// - 'list projects'": "",
+  "// - 'update project 1 from git'": "",
+  "//": "",
+  "// Playbook Development:": "",
+  "// - 'create a playbook to install nginx'": "",
+  "// - 'validate playbook deploy.yml'": "",
+  "// - 'run playbook locally'": "",
+  
+  "// ==========================================================================": "",
+  "// SECURITY BEST PRACTICES": "",
+  "// ==========================================================================": "",
+  "// ✅ DO:": "",
+  "// - Use VS Code secrets for all tokens/passwords": "",
+  "// - Rotate AWX tokens regularly (every 30-90 days)": "",
+  "// - Use separate tokens for dev/staging/prod": "",
+  "// - Enable SSL/TLS for all AWX and remote server connections": "",
+  "// - Use least-privilege AWX tokens (only necessary permissions)": "",
+  "// - Enable audit logging in production": "",
+  "//": "",
+  "// ❌ DON'T:": "",
+  "// - Hard-code tokens in settings.json": "",
+  "// - Commit settings.json with secrets to git": "",
+  "// - Share tokens between users": "",
+  "// - Disable SSL verification in production": "",
+  "// - Use admin tokens for automation": "",
+  "// - Store credentials in plain text": ""
+}

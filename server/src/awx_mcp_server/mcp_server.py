@@ -72,10 +72,19 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
             awx_token = os.getenv("AWX_TOKEN")
             awx_username = os.getenv("AWX_USERNAME")
             awx_password = os.getenv("AWX_PASSWORD")
+            awx_platform = os.getenv("AWX_PLATFORM", "awx").lower()  # Default to AWX
             awx_verify_ssl = os.getenv("AWX_VERIFY_SSL", "true").lower() == "true"
             
+            # Validate platform type
+            from awx_mcp_server.domain import PlatformType
+            try:
+                platform_type = PlatformType(awx_platform)
+            except ValueError:
+                logger.warning(f"Invalid AWX_PLATFORM value '{awx_platform}', defaulting to 'awx'")
+                platform_type = PlatformType.AWX
+            
             # Debug logging
-            logger.info(f"Environment variables: AWX_BASE_URL={awx_base_url}, AWX_TOKEN={'*' * 10 if awx_token else None}, AWX_USERNAME={awx_username}, AWX_VERIFY_SSL={awx_verify_ssl}")
+            logger.info(f"Environment variables: AWX_BASE_URL={awx_base_url}, AWX_PLATFORM={platform_type.value}, AWX_TOKEN={'*' * 10 if awx_token else None}, AWX_USERNAME={awx_username}, AWX_VERIFY_SSL={awx_verify_ssl}")
             
             if not awx_base_url:
                 raise NoActiveEnvironmentError(
@@ -87,6 +96,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                 env_id=uuid4(),
                 name="default",
                 base_url=awx_base_url,
+                platform_type=platform_type,
                 verify_ssl=awx_verify_ssl,
                 is_default=True,
                 allowed_job_templates=[],

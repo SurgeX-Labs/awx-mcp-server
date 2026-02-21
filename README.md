@@ -1,10 +1,12 @@
-# AWX MCP - AI-Powered AWX/Ansible Automation
+# AWX MCP - AI-Powered AWX/AAP/Ansible Automation
 
-**Industry-standard MCP server for AWX/Ansible Tower automation**
+**Industry-standard MCP server for AWX/AAP/Ansible Tower automation**
 
-The AWX MCP Server connects AWX/Ansible Tower to AI tools, giving AI agents and assistants the ability to manage job templates, launch and monitor jobs, manage inventories and projects, and automate infrastructure workflows through natural language interactions.
+The AWX MCP Server connects **AWX**, **Ansible Automation Platform (AAP)**, and **Ansible Tower** to AI tools, giving AI agents and assistants the ability to manage job templates, launch and monitor jobs, manage inventories and projects, and automate infrastructure workflows through natural language interactions.
 
-**Designed for developers who want to integrate their AI tools with AWX/Ansible Tower's automation capabilities.**
+**Designed for developers who want to integrate their AI tools with AWX/AAP/Tower automation capabilities.**
+
+**✨ Supports AWX (open source), AAP (Red Hat), and Ansible Tower (legacy) - same API, same features!**
 
 ---
 
@@ -549,6 +551,28 @@ Access monitoring dashboards:
 - `awx_mcp_active_connections` - Active connections per tenant
 - `awx_mcp_tool_calls_total` - MCP tool invocations
 - `awx_mcp_errors_total` - Error count by type
+
+---
+
+## 📚 Documentation
+
+### Platform Support
+- **[AAP Support Guide](AAP_SUPPORT.md)** - Complete guide for Ansible Automation Platform, AWX, and Ansible Tower
+- **[OS Compatibility](OS_COMPATIBILITY.md)** - Windows, macOS, and Linux installation and configuration
+
+### Deployment Architectures
+- **[Deployment Architecture](DEPLOYMENT_ARCHITECTURE.md)** - Single-user vs Team/Enterprise deployment options
+- **[Remote Deployment Guide](server/REMOTE_DEPLOYMENT.md)** - Docker, Kubernetes, and cloud deployment
+- **[Dual-Mode Quick Start](DUAL_MODE_QUICKSTART.md)** - Quick reference for choosing deployment mode
+
+### Advanced Features (Planned)
+- **[Vault Integration](server/VAULT_INTEGRATION.md)** - HashiCorp Vault, AWS Secrets Manager, Azure Key Vault support (v2.0.0)
+- **[Implementation Status](IMPLEMENTATION_STATUS.md)** - Current features and roadmap
+
+### Additional Resources
+- **[MCP Copilot Setup](vscode-extension/MCP_COPILOT_SETUP.md)** - VS Code MCP configuration
+- **[Quick Reference](docs/QUICKREF.md)** - Common commands and examples
+- **[AWX MCP Query Reference](AWX_MCP_QUERY_REFERENCE.md)** - Natural language query examples
 
 ---
 

@@ -28,6 +28,7 @@ from awx_mcp_server.domain.models import (
     JobEvent,
     JobStatus,
     JobTemplate,
+    PlatformType,
     Project,
 )
 
@@ -51,6 +52,7 @@ __all__ = [
     # Models
     "EnvironmentConfig",
     "CredentialType",
+    "PlatformType",
     "JobTemplate",
     "Project",
     "Inventory",
