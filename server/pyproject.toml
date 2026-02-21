@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "awx-mcp-server"
-version = "1.1.4"
+version = "1.1.5"
 description = "AWX MCP Server - Control AWX/Ansible Tower through the Model Context Protocol"
 requires-python = ">=3.10"
 authors = [

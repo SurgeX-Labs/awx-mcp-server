@@ -1,0 +1,29 @@
+# Build artifacts
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+
+# Secrets and tokens
+.mcpregistry_github_token
+.mcpregistry_registry_token
+*.token
+*.key
+
+# Environment
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
