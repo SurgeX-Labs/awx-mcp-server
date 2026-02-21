@@ -51,60 +51,106 @@ The AWX MCP Server connects **AWX**, **Ansible Automation Platform (AAP)**, and 
 
 ## 🚀 Quick Start
 
-### Option 1: VS Code Extension
+### Installation Methods
 
-#### Prerequisites
-- VS Code with GitHub Copilot extension
-- Python 3.10+
-- AWX/Ansible Tower instance
+You have **three ways** to install and run the AWX MCP Server:
 
-#### Installation
+| Method | Best For | Installation |
+|--------|----------|--------------|
+| **📦 PyPI (pip)** | Quick install, production use | `pip install awx-mcp-server` |
+| **🔧 From Source** | Customization, development, enterprise forks | Clone from GitHub, edit code |
+| **🐳 Docker** | Containerized deployment, teams | `docker run surgexlabs/awx-mcp-server` |
 
-```bash
-# Clone repository
-git clone https://github.com/your-org/awx-mcp.git
-cd awx-mcp/awx-mcp-python
-
-# Install MCP server
-cd shared
-pip install -e .
-
-# Build VS Code extension
-cd ../vscode-extension
-npm install
-npm run package
-
-# Install .vsix file in VS Code
-code --install-extension awx-mcp-*.vsix
-```
-
-#### Configuration
-
-1. Open VS Code Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
-2. Run: `AWX: Configure Environment`
-3. Enter your AWX details:
-   - Environment name
-   - AWX URL
-   - Username/token
-4. Test connection: `AWX: Test Connection`
-
-#### Usage
-
-Open GitHub Copilot Chat and use `@awx`:
-
-```
-@awx list job templates
-@awx launch "Deploy Production" with environment=prod
-@awx show recent jobs
-@awx get job 123 output
-@awx why did job 456 fail?
-```
-
-**See**: [vscode-extension/README.md](vscode-extension/README.md) for detailed guide
+**→ For customization and running from your own repository, see [INSTALL_FROM_SOURCE.md](INSTALL_FROM_SOURCE.md)**
 
 ---
 
-### Option 2: Standalone Web Server
+### Option 1: PyPI Installation (Recommended for Quick Start)
+
+#### Install from PyPI
+
+```bash
+# Install the MCP server
+pip install awx-mcp-server
+
+# Verify installation
+python -m awx_mcp_server --version
+```
+
+#### Configure for VS Code
+
+**Edit VS Code settings.json** (`Ctrl+,` → Search "chat.mcp"):
+
+```json
+{
+  "mcpServers": {
+    "awx": {
+      "command": "python",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "https://your-awx.com"
+      },
+      "secrets": {
+        "AWX_TOKEN": "your-awx-token"
+      }
+    }
+  }
+}
+```
+
+**Restart VS Code** and the MCP server will be available in Copilot Chat.
+
+---
+
+### Option 2: Install from Source (For Customization)
+
+**Perfect for**: Forking, customization, enterprise deployments, contributing
+
+**Quick install**:
+```bash
+# Clone the repository (or your fork)
+git clone https://github.com/SurgeX-Labs/awx-mcp-server.git
+cd awx-mcp-server/awx-mcp-python/server
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: .\venv\Scripts\Activate.ps1
+
+# Install in editable mode
+pip install -e .
+
+# Verify
+python -m awx_mcp_server --version
+```
+
+**VS Code configuration** (use venv Python):
+```json
+{
+  "mcpServers": {
+    "awx": {
+      "command": "/path/to/awx-mcp-server/awx-mcp-python/server/venv/bin/python",
+      "args": ["-m", "awx_mcp_server"],
+      "env": {
+        "AWX_BASE_URL": "https://your-awx.com"
+      },
+      "secrets": {
+        "AWX_TOKEN": "your-token"
+      }
+    }
+  }
+}
+```
+
+**📖 Full Guide**: See [INSTALL_FROM_SOURCE.md](INSTALL_FROM_SOURCE.md) for:
+- Forking the repository
+- Making customizations to the code
+- Running from your own fork/repository
+- Building custom Docker images from source
+- Enterprise deployment and CI/CD
+
+---
+
+### Option 3: Remote Server Mode (Team/Enterprise)
 
 #### Prerequisites
 - Python 3.10+
@@ -556,9 +602,13 @@ Access monitoring dashboards:
 
 ## 📚 Documentation
 
+### Installation & Setup
+- **[Install from PyPI](https://pypi.org/project/awx-mcp-server/)** - Quick install with `pip install awx-mcp-server`
+- **[Install from Source](INSTALL_FROM_SOURCE.md)** - Fork, customize, and run from your own repository
+- **[OS Compatibility](OS_COMPATIBILITY.md)** - Windows, macOS, and Linux installation and configuration
+
 ### Platform Support
 - **[AAP Support Guide](AAP_SUPPORT.md)** - Complete guide for Ansible Automation Platform, AWX, and Ansible Tower
-- **[OS Compatibility](OS_COMPATIBILITY.md)** - Windows, macOS, and Linux installation and configuration
 
 ### Deployment Architectures
 - **[Deployment Architecture](DEPLOYMENT_ARCHITECTURE.md)** - Single-user vs Team/Enterprise deployment options
