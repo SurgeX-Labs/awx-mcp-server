@@ -168,8 +168,25 @@ With the server configured, you can use natural language like:
 
 ## Documentation
 
-- **GitHub**: https://github.com/SurgeX-Labs/awx-mcp-server
-- **Query Reference**: https://github.com/SurgeX-Labs/awx-mcp-server/blob/main/AWX_MCP_QUERY_REFERENCE.md
+### Installation & Setup
+- **[Quick Start](QUICK_START.md)** - Get started in 5 minutes with local setup
+- **[Two Keys Quick Reference](TWO_KEYS_QUICK_REFERENCE.md)** - Understanding MCP API Key vs AAP Token
+- **[Remote Client Setup](REMOTE_CLIENT_SETUP.md)** - Configure VS Code for remote MCP server
+- **[Remote Deployment](REMOTE_DEPLOYMENT.md)** - Deploy server in Docker, Kubernetes, or cloud
+- **[Install from Source](../INSTALL_FROM_SOURCE.md)** - Fork and customize for your organization
+
+### Platform Support
+- **[AAP Support](../AAP_SUPPORT.md)** - Configure for Ansible Automation Platform or Ansible Tower
+- **[OS Compatibility](../OS_COMPATIBILITY.md)** - Windows, macOS, and Linux installation guides
+
+### Advanced
+- **[Query Reference](../AWX_MCP_QUERY_REFERENCE.md)** - All 49 tools with examples
+- **[Vault Integration](VAULT_INTEGRATION.md)** - HashiCorp Vault for secrets management
+- **[GitHub Installation](GITHUB_INSTALLATION.md)** - Install directly from GitHub
+
+### Resources
+- **GitHub Repository**: https://github.com/SurgeX-Labs/awx-mcp-server
+- **PyPI Package**: https://pypi.org/project/awx-mcp-server/
 - **MCP Protocol**: https://modelcontextprotocol.io/
 
 ## License

@@ -4,12 +4,14 @@ import asyncio
 import json
 import secrets
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Optional, AsyncIterator
+from collections.abc import Sequence
 
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse, Response
 from mcp.server import Server
+from mcp.types import TextContent, ImageContent, EmbeddedResource
 from pydantic import BaseModel
 import structlog
 
@@ -59,6 +61,174 @@ def verify_api_key(x_api_key: str = Header(...)) -> dict[str, Any]:
             raise HTTPException(status_code=401, detail="API key expired")
     
     return key_info
+
+
+def verify_api_key_optional(x_api_key: Optional[str] = Header(None)) -> dict[str, Any]:
+    """
+    Optional API key verification for MCP endpoints.
+    If no API key provided, uses default/anonymous tenant.
+    For enterprise deployments, make this required.
+    """
+    if x_api_key:
+        if x_api_key in API_KEYS:
+            key_info = API_KEYS[x_api_key]
+            # Check expiration
+            if key_info.get("expires_at"):
+                expires_at = datetime.fromisoformat(key_info["expires_at"])
+                if datetime.utcnow() > expires_at:
+                    raise HTTPException(status_code=401, detail="API key expired")
+            return key_info
+        else:
+            # API key provided but invalid
+            raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    # No API key provided - use anonymous/default tenant
+    # For production, you may want to require API keys
+    return {
+        "tenant_id": "default",
+        "name": "Anonymous User",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+
+
+def extract_awx_config_from_headers(request: Request) -> dict[str, str]:
+    """
+    Extract AWX configuration from HTTP headers.
+    Allows clients to pass AWX credentials per-request.
+    """
+    headers = request.headers
+    config = {}
+    
+    if "X-AWX-Base-URL" in headers:
+        config["AWX_BASE_URL"] = headers["X-AWX-Base-URL"]
+    if "X-AWX-Token" in headers:
+        config["AWX_TOKEN"] = headers["X-AWX-Token"]
+    if "X-AWX-Username" in headers:
+        config["AWX_USERNAME"] = headers["X-AWX-Username"]
+    if "X-AWX-Password" in headers:
+        config["AWX_PASSWORD"] = headers["X-AWX-Password"]
+    if "X-AWX-Platform" in headers:
+        config["AWX_PLATFORM"] = headers["X-AWX-Platform"]
+    if "X-AWX-Verify-SSL" in headers:
+        config["AWX_VERIFY_SSL"] = headers["X-AWX-Verify-SSL"]
+    
+    return config
+
+
+async def process_mcp_message(mcp_server: Server, message: dict, tenant_id: str) -> dict:
+    """
+    Process an MCP JSON-RPC message and return the result.
+    Handles: initialize, tools/list, tools/call, resources/list, etc.
+    """
+    method = message.get("method")
+    params = message.get("params", {})
+    msg_id = message.get("id")
+    
+    try:
+        # Handle different MCP methods
+        if method == "initialize":
+            # MCP handshake - return server info
+            result = {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "tools": {},
+                    "resources": {},
+                },
+                "serverInfo": {
+                    "name": "awx-mcp-server",
+                    "version": "1.1.6",
+                },
+            }
+            
+        elif method == "tools/list":
+            # List available tools - call the server's handler using class type as key
+            from mcp.types import ListToolsRequest
+            request = ListToolsRequest(method="tools/list", params=params)
+            handler = mcp_server.request_handlers[ListToolsRequest]
+            server_result = await handler(request)
+            # ServerResult is a Pydantic RootModel - access the wrapped result via .root
+            tools_result = server_result.root
+            result = {"tools": [tool.model_dump() for tool in tools_result.tools]}
+            
+        elif method == "tools/call":
+            # Call a specific tool
+            tool_name = params.get("name")
+            tool_args = params.get("arguments", {})
+            
+            logger.info("tool_call", tenant_id=tenant_id, tool=tool_name, args=tool_args)
+            
+            # Create proper MCP request using class type as key
+            from mcp.types import CallToolRequest
+            request = CallToolRequest(
+                method="tools/call",
+                params={"name": tool_name, "arguments": tool_args}
+            )
+            
+            # Execute the tool through MCP server
+            handler = mcp_server.request_handlers[CallToolRequest]
+            server_result = await handler(request)
+            # ServerResult is a Pydantic RootModel - access the wrapped result via .root
+            tool_result = server_result.root
+            
+            # Convert result to JSON-serializable format
+            result = {
+                "content": [
+                    {
+                        "type": content.type,
+                        "text": content.text if hasattr(content, 'text') else str(content),
+                    }
+                    for content in tool_result.content
+                ]
+            }
+            
+        elif method == "resources/list":
+            # List available resources using class type as key
+            from mcp.types import ListResourcesRequest
+            request = ListResourcesRequest(method="resources/list", params=params)
+            handler = mcp_server.request_handlers[ListResourcesRequest]
+            server_result = await handler(request)
+            # ServerResult is a Pydantic RootModel - access the wrapped result via .root
+            resources_result = server_result.root
+            result = {"resources": [res.model_dump() for res in resources_result.resources]}
+            
+        elif method == "ping":
+            # Ping/pong for keep-alive
+            from mcp.types import PingRequest
+            request = PingRequest(method="ping", params=params)
+            handler = mcp_server.request_handlers[PingRequest]
+            ping_result = await handler(request)
+            result = {}  # Ping returns empty result
+            
+        else:
+            # Unknown method
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "error": {
+                    "code": -32601,
+                    "message": f"Method not found: {method}",
+                }
+            }
+        
+        # Return successful result
+        return {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": result,
+        }
+        
+    except Exception as e:
+        logger.error("process_mcp_message_error", method=method, error=str(e), tenant_id=tenant_id)
+        import traceback
+        traceback.print_exc()
+        return {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "error": {
+                "code": -32603,
+                "message": f"Internal error: {str(e)}",
+            }
+        }
 
 
 def create_app(mcp_server: Server) -> FastAPI:
@@ -123,68 +293,22 @@ def create_app(mcp_server: Server) -> FastAPI:
 
     @app.get("/health")
     async def health_check():
-        """Health check endpoint."""
+        """Health check endpoint for load balancers and monitoring."""
         return {
             "status": "healthy",
             "timestamp": datetime.utcnow().isoformat(),
             "service": "awx-mcp-server",
-            "version": "1.0.0",
-        }
-
-    @app.get("/metrics")
-    async def metrics(tenant_info: dict = Depends(verify_api_key)):
-        """Get metrics for authenticated tenant."""
-        tenant_id = tenant_info["tenant_id"]
-        config_manager = ConfigManager(tenant_id=tenant_id)
-        envs = config_manager.list_environments()
-        
-        # Get tenant-specific stats
-        stats = monitoring_service.get_tenant_stats(tenant_id)
-        
-        return {
-            "tenant_id": tenant_id,
-            "environments_count": len(envs),
-            "timestamp": datetime.utcnow().isoformat(),
-            "stats": stats,
+            "version": "1.1.6",
         }
 
     @app.get("/prometheus-metrics")
     async def prometheus_metrics():
-        """Prometheus metrics endpoint (public)."""
+        """
+        Prometheus metrics endpoint (public, no auth required).
+        Returns metrics for all tenants in Prometheus exposition format.
+        """
         metrics_data = monitoring_service.get_prometheus_metrics()
         return Response(content=metrics_data, media_type=CONTENT_TYPE_LATEST)
-
-    @app.get("/stats")
-    async def get_stats(
-        tenant_id: Optional[str] = None,
-        authorization: str = Header(...),
-    ):
-        """Get statistics (admin only)."""
-        if authorization != "Bearer admin-secret-token":
-            raise HTTPException(status_code=403, detail="Admin access required")
-        
-        if tenant_id:
-            return monitoring_service.get_tenant_stats(tenant_id)
-        else:
-            return {
-                "tenants": monitoring_service.get_all_stats(),
-                "timestamp": datetime.utcnow().isoformat(),
-            }
-
-    @app.get("/stats/requests")
-    async def get_requests(
-        tenant_id: Optional[str] = None,
-        limit: int = 100,
-        authorization: str = Header(...),
-    ):
-        """Get recent requests (admin only)."""
-        if authorization != "Bearer admin-secret-token":
-            raise HTTPException(status_code=403, detail="Admin access required")
-        
-        return {
-            "requests": monitoring_service.get_recent_requests(tenant_id, limit),
-            "timestamp": datetime.utcnow().isoformat(),
-        }
 
     @app.post("/api/keys", response_model=APIKeyResponse)
     async def create_api_key(
@@ -244,6 +368,128 @@ def create_app(mcp_server: Server) -> FastAPI:
                 for key, info in API_KEYS.items()
             ]
         }
+
+    # =============================================================================
+    # MCP-over-HTTP Endpoints (VS Code, Claude Desktop, etc.)
+    # =============================================================================
+
+    @app.post("/mcp")
+    async def mcp_endpoint(
+        request: Request,
+        tenant_info: dict = Depends(verify_api_key_optional),
+    ):
+        """
+        Main MCP JSON-RPC endpoint for VS Code and other MCP clients.
+        Handles all MCP protocol messages via HTTP POST.
+        
+        Optional API key authentication - if not provided, uses default tenant.
+        AWX credentials can be passed via X-AWX-* headers.
+        """
+        tenant_id = tenant_info["tenant_id"]
+        
+        try:
+            # Get JSON-RPC message
+            message = await request.json()
+            logger.info("mcp_message_received", tenant_id=tenant_id, method=message.get("method"))
+            
+            # Extract AWX config from headers (allows per-request credentials)
+            awx_config = extract_awx_config_from_headers(request)
+            
+            # Temporarily set environment variables for this request
+            import os
+            original_env = {}
+            for key, value in awx_config.items():
+                original_env[key] = os.environ.get(key)
+                os.environ[key] = value
+            
+            try:
+                # Process MCP message through the server
+                # The mcp_server handles: initialize, tools/list, tools/call, resources/list, etc.
+                result = await process_mcp_message(mcp_server, message, tenant_id)
+                
+                # Record metrics
+                if message.get("method") ==  "tools/call":
+                    tool_name = message.get("params", {}).get("name")
+                    monitoring_service.record_tool_call(tenant_id, tool_name, success=True)
+                
+                return result
+                
+            finally:
+                # Restore original environment
+                for key, original_value in original_env.items():
+                    if original_value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = original_value
+                        
+        except Exception as e:
+            logger.error("mcp_error", error=str(e), tenant_id=tenant_id)
+            if message.get("method") == "tools/call":
+                tool_name = message.get("params", {}).get("name")
+                monitoring_service.record_tool_call(tenant_id, tool_name, success=False)
+            
+            # Return JSON-RPC error
+            return JSONResponse(
+                status_code=200,  # JSON-RPC errors use 200 with error in body
+                content={
+                    "jsonrpc": "2.0",
+                    "id": message.get("id"),
+                    "error": {
+                        "code": -32603,
+                        "message": str(e),
+                    }
+                }
+            )
+
+    @app.get("/mcp/sse")
+    async def mcp_sse_endpoint(
+        request: Request,
+        tenant_info: dict = Depends(verify_api_key_optional),
+    ):
+        """
+        MCP Server-Sent Events endpoint for streaming responses.
+        Used by some MCP clients for real-time updates.
+        """
+        tenant_id = tenant_info["tenant_id"]
+        
+        async def event_stream() -> AsyncIterator[str]:
+            """Generate SSE events."""
+            # Send initial connection event
+            yield f"event: connected\ndata: {json.dumps({'tenant_id': tenant_id})}\n\n"
+            
+            # Keep connection alive with periodic heartbeat
+            try:
+                while True:
+                    await asyncio.sleep(30)
+                    yield f"event: heartbeat\ndata: {json.dumps({'timestamp': datetime.utcnow().isoformat()})}\n\n"
+            except asyncio.CancelledError:
+                logger.info("sse_connection_closed", tenant_id=tenant_id)
+                raise
+        
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",  # Disable nginx buffering
+            }
+        )
+
+    @app.options("/mcp")
+    @app.options("/mcp/sse")
+    async def mcp_options():
+        """Handle CORS preflight requests for MCP endpoints."""
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, X-API-Key, X-AWX-Base-URL, X-AWX-Token, X-AWX-Platform, X-AWX-Username, X-AWX-Password, X-AWX-Verify-SSL",
+            }
+        )
+
+    # =============================================================================
 
     @app.post("/messages")
     async def handle_messages(
