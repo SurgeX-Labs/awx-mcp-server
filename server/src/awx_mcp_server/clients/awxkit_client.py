@@ -15,6 +15,9 @@ from awx_mcp_server.domain import (
     JobStatus,
     JobTemplate,
     Project,
+    WorkflowJob,
+    WorkflowJobNode,
+    WorkflowJobTemplate,
 )
 
 
@@ -287,6 +290,39 @@ class AwxkitClient(AWXClient):
     ) -> list[JobEvent]:
         """Get job events - not well supported by awxkit CLI, use REST."""
         raise NotImplementedError("Use REST client for job events")
+
+    # Workflow methods - not supported by awxkit CLI, use REST
+    async def list_workflow_job_templates(
+        self, name_filter: Optional[str] = None, page: int = 1, page_size: int = 25
+    ) -> list[WorkflowJobTemplate]:
+        raise NotImplementedError("Use REST client for workflow job templates")
+
+    async def get_workflow_job_template(self, template_id: int) -> WorkflowJobTemplate:
+        raise NotImplementedError("Use REST client for workflow job templates")
+
+    async def launch_workflow_job(
+        self, template_id: int, extra_vars: Optional[dict[str, Any]] = None,
+        limit: Optional[str] = None, tags: Optional[list[str]] = None,
+        skip_tags: Optional[list[str]] = None,
+    ) -> WorkflowJob:
+        raise NotImplementedError("Use REST client for workflow jobs")
+
+    async def get_workflow_job(self, job_id: int) -> WorkflowJob:
+        raise NotImplementedError("Use REST client for workflow jobs")
+
+    async def list_workflow_jobs(
+        self, status: Optional[str] = None, page: int = 1, page_size: int = 25,
+        workflow_template_id: Optional[int] = None,
+    ) -> list[WorkflowJob]:
+        raise NotImplementedError("Use REST client for workflow jobs")
+
+    async def cancel_workflow_job(self, job_id: int) -> dict[str, Any]:
+        raise NotImplementedError("Use REST client for workflow jobs")
+
+    async def get_workflow_job_nodes(
+        self, job_id: int, page: int = 1, page_size: int = 100
+    ) -> list[WorkflowJobNode]:
+        raise NotImplementedError("Use REST client for workflow job nodes")
 
     def _parse_job(self, data: dict[str, Any]) -> Job:
         """Parse job from CLI output."""

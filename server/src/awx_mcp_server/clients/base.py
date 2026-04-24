@@ -3,7 +3,16 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from awx_mcp_server.domain import Inventory, Job, JobEvent, JobTemplate, Project
+from awx_mcp_server.domain import (
+    Inventory,
+    Job,
+    JobEvent,
+    JobTemplate,
+    Project,
+    WorkflowJob,
+    WorkflowJobNode,
+    WorkflowJobTemplate,
+)
 
 
 class AWXClient(ABC):
@@ -100,4 +109,58 @@ class AWXClient(ABC):
         self, job_id: int, failed_only: bool = False, page: int = 1, page_size: int = 100
     ) -> list[JobEvent]:
         """Get job events."""
+        pass
+
+    # Workflow Job Templates
+
+    @abstractmethod
+    async def list_workflow_job_templates(
+        self, name_filter: Optional[str] = None, page: int = 1, page_size: int = 25
+    ) -> list[WorkflowJobTemplate]:
+        """List workflow job templates."""
+        pass
+
+    @abstractmethod
+    async def get_workflow_job_template(self, template_id: int) -> WorkflowJobTemplate:
+        """Get workflow job template by ID."""
+        pass
+
+    @abstractmethod
+    async def launch_workflow_job(
+        self,
+        template_id: int,
+        extra_vars: Optional[dict[str, Any]] = None,
+        limit: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+        skip_tags: Optional[list[str]] = None,
+    ) -> WorkflowJob:
+        """Launch workflow job from template."""
+        pass
+
+    @abstractmethod
+    async def get_workflow_job(self, job_id: int) -> WorkflowJob:
+        """Get workflow job by ID."""
+        pass
+
+    @abstractmethod
+    async def list_workflow_jobs(
+        self,
+        status: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 25,
+        workflow_template_id: Optional[int] = None,
+    ) -> list[WorkflowJob]:
+        """List workflow jobs."""
+        pass
+
+    @abstractmethod
+    async def cancel_workflow_job(self, job_id: int) -> dict[str, Any]:
+        """Cancel running workflow job."""
+        pass
+
+    @abstractmethod
+    async def get_workflow_job_nodes(
+        self, job_id: int, page: int = 1, page_size: int = 100
+    ) -> list[WorkflowJobNode]:
+        """Get workflow job nodes (individual steps)."""
         pass

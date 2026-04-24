@@ -262,6 +262,202 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                 "required": ["credential_id"],
             },
         ),
+        # Notification Templates
+        Tool(
+            name="awx_notification_templates_list",
+            description="List AWX notification templates. Shows configured notifications (Slack, email, webhook, etc.) and their types.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "filter": {"type": "string", "description": "Filter notification templates by name"},
+                    "page": {"type": "number", "description": "Page number (default: 1)"},
+                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
+                },
+            },
+        ),
+        Tool(
+            name="awx_notification_template_get",
+            description="Get details of a specific AWX notification template by ID, including its type, configuration, and custom messages.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Notification template ID"},
+                },
+                "required": ["template_id"],
+            },
+        ),
+        Tool(
+            name="awx_notification_template_create",
+            description="Create a new AWX notification template (Slack, email, webhook, etc.).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Notification template name"},
+                    "organization": {"type": "number", "description": "Organization ID"},
+                    "notification_type": {
+                        "type": "string",
+                        "description": "Notification type",
+                        "enum": ["slack", "email", "webhook", "pagerduty", "grafana", "twilio", "irc", "mattermost", "rocketchat"],
+                    },
+                    "notification_configuration": {
+                        "type": "object",
+                        "description": "Type-specific config (e.g., {token, channels, hex_color} for Slack, {url} for webhook)",
+                    },
+                    "description": {"type": "string", "description": "Description"},
+                    "messages": {
+                        "type": "object",
+                        "description": "Custom messages per event, e.g., {started: {message: '...'}, success: {message: '...'}, error: {message: '...'}}",
+                    },
+                },
+                "required": ["name", "organization", "notification_type"],
+            },
+        ),
+        Tool(
+            name="awx_notification_template_test",
+            description="Send a test notification from a notification template. Useful for verifying the template configuration (Slack channel, webhook URL, etc.) is working.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Notification template ID to test"},
+                },
+                "required": ["template_id"],
+            },
+        ),
+        Tool(
+            name="awx_notifications_list",
+            description="List sent notification history/delivery log. Shows notification status (pending, successful, failed), recipients, and errors. Can filter by notification template or status.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "notification_template_id": {"type": "number", "description": "Filter by notification template ID"},
+                    "status": {"type": "string", "description": "Filter by status (pending, successful, failed)"},
+                    "page": {"type": "number", "description": "Page number (default: 1)"},
+                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
+                },
+            },
+        ),
+        Tool(
+            name="awx_notification_template_update",
+            description="Update an existing AWX notification template. Only provided fields are changed (partial update).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Notification template ID"},
+                    "name": {"type": "string", "description": "New name"},
+                    "description": {"type": "string", "description": "New description"},
+                    "notification_configuration": {
+                        "type": "object",
+                        "description": "Updated type-specific config",
+                    },
+                    "messages": {
+                        "type": "object",
+                        "description": "Updated custom messages per event",
+                    },
+                },
+                "required": ["template_id"],
+            },
+        ),
+        Tool(
+            name="awx_notification_template_delete",
+            description="Delete an AWX notification template.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Notification template ID to delete"},
+                },
+                "required": ["template_id"],
+            },
+        ),
+        Tool(
+            name="awx_job_template_notifications_list",
+            description="List notification templates associated with a job template, showing which notifications fire on started, success, and error events.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Job template ID"},
+                },
+                "required": ["template_id"],
+            },
+        ),
+        Tool(
+            name="awx_job_template_notification_associate",
+            description="Associate/attach a notification template to a job template for a specific event (started, success, or error).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Job template ID"},
+                    "notification_template_id": {"type": "number", "description": "Notification template ID to attach"},
+                    "event": {
+                        "type": "string",
+                        "description": "Event to trigger notification on",
+                        "enum": ["started", "success", "error"],
+                    },
+                },
+                "required": ["template_id", "notification_template_id", "event"],
+            },
+        ),
+        Tool(
+            name="awx_job_template_notification_disassociate",
+            description="Disassociate/remove a notification template from a job template for a specific event (started, success, or error).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Job template ID"},
+                    "notification_template_id": {"type": "number", "description": "Notification template ID to remove"},
+                    "event": {
+                        "type": "string",
+                        "description": "Event to remove notification from",
+                        "enum": ["started", "success", "error"],
+                    },
+                },
+                "required": ["template_id", "notification_template_id", "event"],
+            },
+        ),
+        Tool(
+            name="awx_workflow_template_notifications_list",
+            description="List notification templates associated with a workflow job template, showing which notifications fire on started, success, and error events.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Workflow job template ID"},
+                },
+                "required": ["template_id"],
+            },
+        ),
+        Tool(
+            name="awx_workflow_template_notification_associate",
+            description="Associate/attach a notification template to a workflow job template for a specific event (started, success, or error).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Workflow job template ID"},
+                    "notification_template_id": {"type": "number", "description": "Notification template ID to attach"},
+                    "event": {
+                        "type": "string",
+                        "description": "Event to trigger notification on",
+                        "enum": ["started", "success", "error"],
+                    },
+                },
+                "required": ["template_id", "notification_template_id", "event"],
+            },
+        ),
+        Tool(
+            name="awx_workflow_template_notification_disassociate",
+            description="Disassociate/remove a notification template from a workflow job template for a specific event (started, success, or error).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Workflow job template ID"},
+                    "notification_template_id": {"type": "number", "description": "Notification template ID to remove"},
+                    "event": {
+                        "type": "string",
+                        "description": "Event to remove notification from",
+                        "enum": ["started", "success", "error"],
+                    },
+                },
+                "required": ["template_id", "notification_template_id", "event"],
+            },
+        ),
         # Discovery
         Tool(
             name="awx_templates_list",
@@ -579,6 +775,171 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     "job_id": {"type": "number", "description": "Job ID of the failed job to analyze"},
                 },
                 "required": ["job_id"],
+            },
+        ),
+        # ── Workflow Job Templates ──
+        Tool(
+            name="awx_workflow_templates_list",
+            description="List AWX workflow job templates. Workflow templates define multi-step automation pipelines that chain multiple job templates together. Use this when user asks to 'list workflows', 'show workflow templates', 'what workflows exist'.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "filter": {"type": "string", "description": "Filter workflow templates by name"},
+                    "page": {"type": "number", "description": "Page number (default: 1)"},
+                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
+                },
+            },
+        ),
+        Tool(
+            name="awx_workflow_template_get",
+            description="Get details of a specific AWX workflow job template by ID, including its configuration, launch options, schedule info, and status.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Workflow job template ID"},
+                },
+                "required": ["template_id"],
+            },
+        ),
+        Tool(
+            name="awx_workflow_job_launch",
+            description="Launch/execute/run a workflow job from a workflow job template. Creates a new workflow job that orchestrates multiple steps.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Workflow job template ID to execute"},
+                    "extra_vars": {"type": "object", "description": "Extra variables (JSON) to pass to the workflow"},
+                    "limit": {"type": "string", "description": "Limit execution to specific hosts"},
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Job tags to apply",
+                    },
+                    "skip_tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Job tags to skip",
+                    },
+                },
+                "required": ["template_id"],
+            },
+        ),
+        Tool(
+            name="awx_workflow_job_get",
+            description="Get status and details of a specific AWX workflow job execution, including timing, launch type, and failure explanation.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "job_id": {"type": "number", "description": "Workflow job ID"},
+                },
+                "required": ["job_id"],
+            },
+        ),
+        Tool(
+            name="awx_workflow_jobs_list",
+            description="List recent AWX workflow job executions and their statuses. Use this to see workflow run history.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string", "description": "Filter by status (successful, failed, running, etc.)"},
+                    "workflow_template_id": {"type": "number", "description": "Filter by workflow job template ID"},
+                    "page": {"type": "number", "description": "Page number (default: 1)"},
+                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
+                },
+            },
+        ),
+        Tool(
+            name="awx_workflow_job_cancel",
+            description="Cancel/stop a running AWX workflow job execution.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "job_id": {"type": "number", "description": "Workflow job ID to cancel"},
+                },
+                "required": ["job_id"],
+            },
+        ),
+        Tool(
+            name="awx_workflow_job_nodes",
+            description="Get the individual step/node details of an AWX workflow job execution. Shows each node's job template, status, elapsed time, and connection graph (success/failure/always paths). Use this to see which steps passed or failed in a workflow run.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "job_id": {"type": "number", "description": "Workflow job ID"},
+                    "page": {"type": "number", "description": "Page number (default: 1)"},
+                    "page_size": {"type": "number", "description": "Page size (default: 100)"},
+                },
+                "required": ["job_id"],
+            },
+        ),
+        Tool(
+            name="awx_workflow_job_delete",
+            description="Delete an AWX workflow job record from history.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "job_id": {"type": "number", "description": "Workflow job ID to delete"},
+                },
+                "required": ["job_id"],
+            },
+        ),
+        Tool(
+            name="awx_workflow_job_relaunch",
+            description="Relaunch/rerun a previous AWX workflow job execution. Creates a new workflow job from the same template with the same parameters.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "job_id": {"type": "number", "description": "Workflow job ID to relaunch"},
+                },
+                "required": ["job_id"],
+            },
+        ),
+        Tool(
+            name="awx_workflow_template_nodes",
+            description="Get the workflow job template node definitions — the graph of steps that make up the workflow template. Shows which job templates/projects/inventory sources are chained together and how (success/failure/always paths).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Workflow job template ID"},
+                    "page": {"type": "number", "description": "Page number (default: 1)"},
+                    "page_size": {"type": "number", "description": "Page size (default: 100)"},
+                },
+                "required": ["template_id"],
+            },
+        ),
+        Tool(
+            name="awx_workflow_template_survey",
+            description="Get the survey spec for a workflow job template. Shows survey questions that are prompted when launching the workflow.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Workflow job template ID"},
+                },
+                "required": ["template_id"],
+            },
+        ),
+        Tool(
+            name="awx_workflow_template_schedules",
+            description="List schedules configured for a workflow job template. Shows when the workflow is set to run automatically.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Workflow job template ID"},
+                    "page": {"type": "number", "description": "Page number (default: 1)"},
+                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
+                },
+                "required": ["template_id"],
+            },
+        ),
+        Tool(
+            name="awx_workflow_template_launch_config",
+            description="Get the launch configuration for a workflow job template. Shows which fields can be prompted on launch (inventory, limit, variables, etc.) and their defaults.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "number", "description": "Workflow job template ID"},
+                },
+                "required": ["template_id"],
             },
         ),
         # ── Local Ansible Development Tools ──
@@ -985,7 +1346,265 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     await client.rest_client.delete_credential(cred_id)
                 
                 return [TextContent(type="text", text=f"Credential {cred_id} deleted successfully")]
-            
+
+            # Notification Templates
+            elif name == "awx_notification_templates_list":
+                env, client = get_active_client()
+                async with client:
+                    templates = await client.rest_client.list_notification_templates(
+                        name_filter=arguments.get("filter"),
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 25),
+                    )
+
+                result = f"Notification Templates ({len(templates)}):\n\n"
+                for tmpl in templates:
+                    result += f"ID: {tmpl['id']} - {tmpl['name']}\n"
+                    result += f"  Type: {tmpl.get('notification_type', 'unknown')}\n"
+                    if tmpl.get('description'):
+                        result += f"  Description: {tmpl['description']}\n"
+                    if tmpl.get('organization'):
+                        org_name = tmpl.get('summary_fields', {}).get('organization', {}).get('name')
+                        if org_name:
+                            result += f"  Organization: {org_name}\n"
+                    config = tmpl.get('notification_configuration', {})
+                    if config.get('channels'):
+                        result += f"  Channels: {', '.join(config['channels'])}\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_notification_template_get":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    tmpl = await client.rest_client.get_notification_template(template_id)
+
+                result = f"Notification Template {template_id}:\n\n"
+                result += f"Name: {tmpl['name']}\n"
+                result += f"Type: {tmpl.get('notification_type', 'unknown')}\n"
+                if tmpl.get('description'):
+                    result += f"Description: {tmpl['description']}\n"
+                org_name = tmpl.get('summary_fields', {}).get('organization', {}).get('name')
+                if org_name:
+                    result += f"Organization: {org_name}\n"
+
+                config = tmpl.get('notification_configuration', {})
+                result += f"\nConfiguration:\n"
+                for key, value in config.items():
+                    if key == 'token':
+                        result += f"  {key}: (encrypted)\n"
+                    else:
+                        result += f"  {key}: {value}\n"
+
+                messages = tmpl.get('messages', {})
+                if messages:
+                    result += f"\nCustom Messages:\n"
+                    for event, msg in messages.items():
+                        if event == 'workflow_approval':
+                            continue
+                        if isinstance(msg, dict) and msg.get('message'):
+                            result += f"  {event}: {msg['message']}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_notification_template_test":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    notif = await client.rest_client.test_notification_template(template_id)
+
+                result = f"Test notification sent\n\n"
+                result += f"Notification ID: {notif.get('id')}\n"
+                result += f"Status: {notif.get('status')}\n"
+                result += f"Type: {notif.get('notification_type')}\n"
+                result += f"Recipients: {notif.get('recipients')}\n"
+                result += f"Subject: {notif.get('subject')}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_notifications_list":
+                env, client = get_active_client()
+
+                async with client:
+                    notifications = await client.rest_client.list_notifications(
+                        notification_template_id=arguments.get("notification_template_id"),
+                        status=arguments.get("status"),
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 25),
+                    )
+
+                result = f"Notifications ({len(notifications)}):\n\n"
+                for n in notifications:
+                    tmpl_name = n.get('summary_fields', {}).get('notification_template', {}).get('name', 'Unknown')
+                    result += f"ID: {n['id']} - {tmpl_name}\n"
+                    result += f"  Status: {n.get('status')}\n"
+                    result += f"  Type: {n.get('notification_type')}\n"
+                    result += f"  Created: {n.get('created')}\n"
+                    result += f"  Recipients: {n.get('recipients')}\n"
+                    if n.get('subject'):
+                        result += f"  Subject: {n['subject'][:100]}\n"
+                    if n.get('error'):
+                        result += f"  Error: {n['error']}\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_notification_template_update":
+                env, client = get_active_client()
+                template_id = arguments.pop("template_id")
+
+                async with client:
+                    tmpl = await client.rest_client.update_notification_template(
+                        template_id,
+                        name=arguments.get("name"),
+                        description=arguments.get("description"),
+                        notification_configuration=arguments.get("notification_configuration"),
+                        messages=arguments.get("messages"),
+                    )
+
+                result = f"Notification template {template_id} updated\n\n"
+                result += f"Name: {tmpl['name']}\n"
+                result += f"Type: {tmpl.get('notification_type')}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_notification_template_delete":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    await client.rest_client.delete_notification_template(template_id)
+
+                return [TextContent(type="text", text=f"Notification template {template_id} deleted successfully")]
+
+            elif name == "awx_notification_template_create":
+                env, client = get_active_client()
+                async with client:
+                    tmpl = await client.rest_client.create_notification_template(
+                        name=arguments["name"],
+                        organization=arguments["organization"],
+                        notification_type=arguments["notification_type"],
+                        notification_configuration=arguments.get("notification_configuration"),
+                        description=arguments.get("description", ""),
+                        messages=arguments.get("messages"),
+                    )
+
+                result = f"Notification template created successfully\n\n"
+                result += f"ID: {tmpl['id']}\n"
+                result += f"Name: {tmpl['name']}\n"
+                result += f"Type: {tmpl.get('notification_type')}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_job_template_notifications_list":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    started = await client.rest_client.list_job_template_notification_templates(template_id, "started")
+                    success = await client.rest_client.list_job_template_notification_templates(template_id, "success")
+                    error = await client.rest_client.list_job_template_notification_templates(template_id, "error")
+
+                result = f"Job Template {template_id} Notifications:\n\n"
+                for event_name, notifs in [("Started", started), ("Success", success), ("Error", error)]:
+                    result += f"{event_name} ({len(notifs)}):\n"
+                    if notifs:
+                        for n in notifs:
+                            result += f"  ID: {n['id']} - {n['name']} ({n.get('notification_type', 'unknown')})\n"
+                    else:
+                        result += f"  (none)\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_job_template_notification_associate":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+                notification_id = arguments["notification_template_id"]
+                event = arguments["event"]
+
+                async with client:
+                    await client.rest_client.associate_job_template_notification(
+                        template_id, notification_id, event
+                    )
+
+                return [TextContent(
+                    type="text",
+                    text=f"Notification template {notification_id} associated with job template {template_id} for '{event}' event",
+                )]
+
+            elif name == "awx_job_template_notification_disassociate":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+                notification_id = arguments["notification_template_id"]
+                event = arguments["event"]
+
+                async with client:
+                    await client.rest_client.disassociate_job_template_notification(
+                        template_id, notification_id, event
+                    )
+
+                return [TextContent(
+                    type="text",
+                    text=f"Notification template {notification_id} disassociated from job template {template_id} for '{event}' event",
+                )]
+
+            elif name == "awx_workflow_template_notifications_list":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    started = await client.rest_client.list_workflow_template_notification_templates(template_id, "started")
+                    success = await client.rest_client.list_workflow_template_notification_templates(template_id, "success")
+                    error = await client.rest_client.list_workflow_template_notification_templates(template_id, "error")
+
+                result = f"Workflow Job Template {template_id} Notifications:\n\n"
+                for event_name, notifs in [("Started", started), ("Success", success), ("Error", error)]:
+                    result += f"{event_name} ({len(notifs)}):\n"
+                    if notifs:
+                        for n in notifs:
+                            result += f"  ID: {n['id']} - {n['name']} ({n.get('notification_type', 'unknown')})\n"
+                    else:
+                        result += f"  (none)\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_template_notification_associate":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+                notification_id = arguments["notification_template_id"]
+                event = arguments["event"]
+
+                async with client:
+                    await client.rest_client.associate_workflow_template_notification(
+                        template_id, notification_id, event
+                    )
+
+                return [TextContent(
+                    type="text",
+                    text=f"Notification template {notification_id} associated with workflow template {template_id} for '{event}' event",
+                )]
+
+            elif name == "awx_workflow_template_notification_disassociate":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+                notification_id = arguments["notification_template_id"]
+                event = arguments["event"]
+
+                async with client:
+                    await client.rest_client.disassociate_workflow_template_notification(
+                        template_id, notification_id, event
+                    )
+
+                return [TextContent(
+                    type="text",
+                    text=f"Notification template {notification_id} disassociated from workflow template {template_id} for '{event}' event",
+                )]
+
             # Templates CRUD
             elif name == "awx_template_create":
                 env, client = get_active_client()
@@ -1410,8 +2029,350 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                 
                 return [TextContent(type="text", text=result)]
             
+            # ── Workflow Job Template Handlers ──
+
+            elif name == "awx_workflow_templates_list":
+                env, client = get_active_client()
+                async with client:
+                    templates = await client.list_workflow_job_templates(
+                        name_filter=arguments.get("filter"),
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 25),
+                    )
+
+                result = f"Workflow Job Templates ({len(templates)}):\n\n"
+                for tmpl in templates:
+                    result += f"ID: {tmpl.id} - {tmpl.name}\n"
+                    if tmpl.description:
+                        result += f"  Description: {tmpl.description}\n"
+                    if tmpl.status:
+                        result += f"  Status: {tmpl.status}\n"
+                    if tmpl.last_job_run:
+                        result += f"  Last Run: {tmpl.last_job_run.isoformat()}\n"
+                    if tmpl.next_job_run:
+                        result += f"  Next Run: {tmpl.next_job_run.isoformat()}\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_template_get":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    tmpl = await client.get_workflow_job_template(template_id)
+
+                result = f"Workflow Job Template {template_id}:\n\n"
+                result += f"Name: {tmpl.name}\n"
+                if tmpl.description:
+                    result += f"Description: {tmpl.description}\n"
+                if tmpl.organization:
+                    result += f"Organization: {tmpl.organization}\n"
+                if tmpl.inventory:
+                    result += f"Inventory: {tmpl.inventory}\n"
+                if tmpl.limit:
+                    result += f"Limit: {tmpl.limit}\n"
+                if tmpl.status:
+                    result += f"Status: {tmpl.status}\n"
+                result += f"Survey Enabled: {tmpl.survey_enabled}\n"
+                result += f"Allow Simultaneous: {tmpl.allow_simultaneous}\n"
+                if tmpl.last_job_run:
+                    result += f"Last Run: {tmpl.last_job_run.isoformat()}\n"
+                if tmpl.next_job_run:
+                    result += f"Next Run: {tmpl.next_job_run.isoformat()}\n"
+                result += f"\nLaunch Options:\n"
+                result += f"  Ask Variables: {tmpl.ask_variables_on_launch}\n"
+                result += f"  Ask Inventory: {tmpl.ask_inventory_on_launch}\n"
+                result += f"  Ask Limit: {tmpl.ask_limit_on_launch}\n"
+                result += f"  Ask Tags: {tmpl.ask_tags_on_launch}\n"
+                result += f"  Ask Skip Tags: {tmpl.ask_skip_tags_on_launch}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_job_launch":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    tmpl = await client.get_workflow_job_template(template_id)
+                    check_allowlist(env, template_id, tmpl.name)
+
+                    wf_job = await client.launch_workflow_job(
+                        template_id=template_id,
+                        extra_vars=arguments.get("extra_vars"),
+                        limit=arguments.get("limit"),
+                        tags=arguments.get("tags"),
+                        skip_tags=arguments.get("skip_tags"),
+                    )
+
+                logger.info(
+                    "workflow_job_launched",
+                    environment=env.name,
+                    template=tmpl.name,
+                    job_id=wf_job.id,
+                )
+
+                result = f"✓ Workflow job launched successfully\n\n"
+                result += f"Workflow Job ID: {wf_job.id}\n"
+                result += f"Name: {wf_job.name}\n"
+                result += f"Status: {wf_job.status.value}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_job_get":
+                env, client = get_active_client()
+                job_id = arguments["job_id"]
+
+                async with client:
+                    wf_job = await client.get_workflow_job(job_id)
+
+                result = f"Workflow Job {job_id} Details:\n\n"
+                result += f"Name: {wf_job.name}\n"
+                result += f"Status: {wf_job.status.value}\n"
+                result += f"Failed: {wf_job.failed}\n"
+                if wf_job.workflow_job_template:
+                    result += f"Template ID: {wf_job.workflow_job_template}\n"
+                if wf_job.launch_type:
+                    result += f"Launch Type: {wf_job.launch_type}\n"
+                if wf_job.started:
+                    result += f"Started: {wf_job.started.isoformat()}\n"
+                if wf_job.finished:
+                    result += f"Finished: {wf_job.finished.isoformat()}\n"
+                if wf_job.elapsed:
+                    result += f"Elapsed: {wf_job.elapsed}s\n"
+                if wf_job.limit:
+                    result += f"Limit: {wf_job.limit}\n"
+                if wf_job.job_explanation:
+                    result += f"\nExplanation: {wf_job.job_explanation}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_jobs_list":
+                env, client = get_active_client()
+
+                async with client:
+                    wf_jobs = await client.list_workflow_jobs(
+                        status=arguments.get("status"),
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 25),
+                        workflow_template_id=arguments.get("workflow_template_id"),
+                    )
+
+                result = f"Workflow Jobs ({len(wf_jobs)}):\n\n"
+                for wf_job in wf_jobs:
+                    result += f"ID: {wf_job.id} - {wf_job.name}\n"
+                    result += f"  Status: {wf_job.status.value}\n"
+                    if wf_job.launch_type:
+                        result += f"  Launch Type: {wf_job.launch_type}\n"
+                    if wf_job.started:
+                        result += f"  Started: {wf_job.started.isoformat()}\n"
+                    if wf_job.finished:
+                        result += f"  Finished: {wf_job.finished.isoformat()}\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_job_cancel":
+                env, client = get_active_client()
+                job_id = arguments["job_id"]
+
+                async with client:
+                    await client.cancel_workflow_job(job_id)
+
+                return [TextContent(type="text", text=f"Workflow job {job_id} cancellation requested")]
+
+            elif name == "awx_workflow_job_nodes":
+                env, client = get_active_client()
+                job_id = arguments["job_id"]
+
+                async with client:
+                    nodes = await client.get_workflow_job_nodes(
+                        job_id=job_id,
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 100),
+                    )
+
+                result = f"Workflow Job {job_id} Nodes ({len(nodes)}):\n\n"
+                for node in nodes:
+                    # Extract names from summary_fields
+                    sf = node.summary_fields
+                    template_name = sf.get("unified_job_template", {}).get("name", "Unknown")
+                    job_type = sf.get("unified_job_template", {}).get("unified_job_type", "unknown")
+                    job_info = sf.get("job", {})
+                    job_status = job_info.get("status", "unknown")
+                    job_failed = job_info.get("failed", False)
+                    job_elapsed = job_info.get("elapsed")
+                    child_job_id = node.job
+
+                    status_icon = "✗" if job_failed else ("✓" if job_status == "successful" else "●")
+                    result += f"{status_icon} Node: {template_name} ({job_type})\n"
+                    if child_job_id:
+                        result += f"  Job ID: {child_job_id} | Status: {job_status}"
+                        if job_elapsed is not None:
+                            result += f" | Elapsed: {job_elapsed}s"
+                        result += "\n"
+                    if node.do_not_run:
+                        result += f"  (skipped)\n"
+                    connections = []
+                    if node.success_nodes:
+                        connections.append(f"success -> {node.success_nodes}")
+                    if node.failure_nodes:
+                        connections.append(f"failure -> {node.failure_nodes}")
+                    if node.always_nodes:
+                        connections.append(f"always -> {node.always_nodes}")
+                    if connections:
+                        result += f"  Connections: {', '.join(connections)}\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_job_delete":
+                env, client = get_active_client()
+                job_id = arguments["job_id"]
+
+                async with client:
+                    await client.rest_client.delete_workflow_job(job_id)
+
+                return [TextContent(type="text", text=f"Workflow job {job_id} deleted successfully")]
+
+            elif name == "awx_workflow_job_relaunch":
+                env, client = get_active_client()
+                job_id = arguments["job_id"]
+
+                async with client:
+                    wf_job = await client.rest_client.relaunch_workflow_job(job_id)
+
+                result = f"Workflow job relaunched successfully\n\n"
+                result += f"New Workflow Job ID: {wf_job.id}\n"
+                result += f"Name: {wf_job.name}\n"
+                result += f"Status: {wf_job.status.value}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_template_nodes":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    nodes = await client.rest_client.get_workflow_job_template_nodes(
+                        template_id,
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 100),
+                    )
+
+                result = f"Workflow Template {template_id} Nodes ({len(nodes)}):\n\n"
+                for node in nodes:
+                    sf = node.get("summary_fields", {})
+                    ujt = sf.get("unified_job_template", {})
+                    template_name = ujt.get("name", "Unknown")
+                    job_type = ujt.get("unified_job_type", "unknown")
+
+                    result += f"Node {node['id']}: {template_name} ({job_type})\n"
+                    connections = []
+                    if node.get("success_nodes"):
+                        connections.append(f"success -> {node['success_nodes']}")
+                    if node.get("failure_nodes"):
+                        connections.append(f"failure -> {node['failure_nodes']}")
+                    if node.get("always_nodes"):
+                        connections.append(f"always -> {node['always_nodes']}")
+                    if connections:
+                        result += f"  Connections: {', '.join(connections)}\n"
+                    if node.get("all_parents_must_converge"):
+                        result += f"  All parents must converge: True\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_template_survey":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    survey = await client.rest_client.get_workflow_job_template_survey(template_id)
+
+                spec = survey.get("spec", [])
+                if not spec:
+                    result = f"Workflow Template {template_id} has no survey questions configured.\n"
+                else:
+                    result = f"Workflow Template {template_id} Survey ({len(spec)} questions):\n\n"
+                    if survey.get("name"):
+                        result += f"Name: {survey['name']}\n"
+                    if survey.get("description"):
+                        result += f"Description: {survey['description']}\n"
+                    result += "\n"
+                    for q in spec:
+                        required = " (required)" if q.get("required") else ""
+                        result += f"Variable: {q.get('variable')}{required}\n"
+                        result += f"  Question: {q.get('question_name', '')}\n"
+                        result += f"  Type: {q.get('type', 'text')}\n"
+                        if q.get("default"):
+                            result += f"  Default: {q['default']}\n"
+                        if q.get("choices"):
+                            result += f"  Choices: {q['choices']}\n"
+                        result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_template_schedules":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    schedules = await client.rest_client.list_workflow_job_template_schedules(
+                        template_id,
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 25),
+                    )
+
+                result = f"Workflow Template {template_id} Schedules ({len(schedules)}):\n\n"
+                for s in schedules:
+                    result += f"ID: {s['id']} - {s['name']}\n"
+                    if s.get("description"):
+                        result += f"  Description: {s['description']}\n"
+                    result += f"  Enabled: {s.get('enabled', False)}\n"
+                    result += f"  RRule: {s.get('rrule', 'N/A')}\n"
+                    if s.get("next_run"):
+                        result += f"  Next Run: {s['next_run']}\n"
+                    if s.get("dtstart"):
+                        result += f"  Start: {s['dtstart']}\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_template_launch_config":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    config = await client.rest_client.get_workflow_job_template_launch_config(template_id)
+
+                result = f"Workflow Template {template_id} Launch Configuration:\n\n"
+                result += f"Can Start Without User Input: {config.get('can_start_without_user_input', False)}\n"
+                result += f"Survey Enabled: {config.get('survey_enabled', False)}\n"
+                result += f"Variables Needed: {config.get('variables_needed_to_start', [])}\n\n"
+
+                result += "Prompt Options:\n"
+                for key in ['ask_inventory_on_launch', 'ask_limit_on_launch', 'ask_scm_branch_on_launch',
+                            'ask_variables_on_launch', 'ask_labels_on_launch', 'ask_tags_on_launch',
+                            'ask_skip_tags_on_launch']:
+                    if config.get(key):
+                        result += f"  {key}: True\n"
+
+                defaults = config.get("defaults", {})
+                if defaults:
+                    result += f"\nDefaults:\n"
+                    for key, value in defaults.items():
+                        if value is not None:
+                            result += f"  {key}: {value}\n"
+
+                missing = config.get("node_templates_missing", [])
+                if missing:
+                    result += f"\nMissing Node Templates: {missing}\n"
+
+                return [TextContent(type="text", text=result)]
+
             # ── Local Ansible Development Tool Handlers ──
-            
+
             elif name == "create_playbook":
                 pb_result = playbook_manager.create_playbook(
                     name=arguments["name"],

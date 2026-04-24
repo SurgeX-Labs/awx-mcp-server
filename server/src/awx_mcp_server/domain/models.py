@@ -141,6 +141,63 @@ class Job(BaseModel):
     artifacts: dict[str, Any] = Field(default_factory=dict)
 
 
+class WorkflowJobTemplate(BaseModel):
+    """AWX workflow job template."""
+
+    id: int
+    name: str
+    description: Optional[str] = None
+    organization: Optional[int] = None
+    inventory: Optional[int] = None
+    limit: Optional[str] = None
+    extra_vars: dict[str, Any] = Field(default_factory=dict)
+    survey_enabled: bool = False
+    allow_simultaneous: bool = False
+    ask_variables_on_launch: bool = False
+    ask_inventory_on_launch: bool = False
+    ask_limit_on_launch: bool = False
+    ask_tags_on_launch: bool = False
+    ask_skip_tags_on_launch: bool = False
+    status: Optional[str] = None
+    last_job_run: Optional[datetime] = None
+    next_job_run: Optional[datetime] = None
+
+
+class WorkflowJob(BaseModel):
+    """AWX workflow job."""
+
+    id: int
+    name: str
+    description: Optional[str] = None
+    status: JobStatus
+    workflow_job_template: Optional[int] = None
+    inventory: Optional[int] = None
+    limit: Optional[str] = None
+    extra_vars: dict[str, Any] = Field(default_factory=dict)
+    started: Optional[datetime] = None
+    finished: Optional[datetime] = None
+    elapsed: Optional[float] = None
+    failed: bool = False
+    launch_type: Optional[str] = None
+    job_explanation: Optional[str] = None
+
+
+class WorkflowJobNode(BaseModel):
+    """AWX workflow job node (individual step in a workflow run)."""
+
+    id: int
+    job: Optional[int] = None
+    workflow_job: int
+    unified_job_template: Optional[int] = None
+    identifier: Optional[str] = None
+    do_not_run: bool = False
+    success_nodes: list[int] = Field(default_factory=list)
+    failure_nodes: list[int] = Field(default_factory=list)
+    always_nodes: list[int] = Field(default_factory=list)
+    all_parents_must_converge: bool = False
+    summary_fields: dict[str, Any] = Field(default_factory=dict)
+
+
 class JobEvent(BaseModel):
     """AWX job event."""
 
