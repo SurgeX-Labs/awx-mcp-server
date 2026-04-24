@@ -249,6 +249,159 @@ class RestAWXClient(AWXClient):
         """Delete credential."""
         await self.client.request("DELETE", f"/api/v2/credentials/{cred_id}/")
 
+    # Notification Templates
+
+    async def list_notification_templates(
+        self, name_filter: Optional[str] = None, page: int = 1, page_size: int = 25
+    ) -> list[dict[str, Any]]:
+        """List notification templates."""
+        params = {"page": page, "page_size": page_size}
+        if name_filter:
+            params["name__icontains"] = name_filter
+
+        data = await self._request("GET", "/api/v2/notification_templates/", params=params)
+        return data.get("results", [])
+
+    async def get_notification_template(self, template_id: int) -> dict[str, Any]:
+        """Get notification template by ID."""
+        return await self._request("GET", f"/api/v2/notification_templates/{template_id}/")
+
+    async def list_job_template_notification_templates(
+        self, template_id: int, event: str
+    ) -> list[dict[str, Any]]:
+        """List notification templates associated with a job template for a given event.
+
+        Args:
+            template_id: Job template ID
+            event: One of 'started', 'success', 'error'
+        """
+        data = await self._request(
+            "GET", f"/api/v2/job_templates/{template_id}/notification_templates_{event}/"
+        )
+        return data.get("results", [])
+
+    async def associate_job_template_notification(
+        self, template_id: int, notification_template_id: int, event: str
+    ) -> dict[str, Any]:
+        """Associate a notification template with a job template for a given event.
+
+        Args:
+            template_id: Job template ID
+            notification_template_id: Notification template ID to attach
+            event: One of 'started', 'success', 'error'
+        """
+        payload = {"id": notification_template_id}
+        return await self._request(
+            "POST", f"/api/v2/job_templates/{template_id}/notification_templates_{event}/",
+            json=payload,
+        )
+
+    async def disassociate_job_template_notification(
+        self, template_id: int, notification_template_id: int, event: str
+    ) -> dict[str, Any]:
+        """Disassociate a notification template from a job template for a given event.
+
+        Args:
+            template_id: Job template ID
+            notification_template_id: Notification template ID to remove
+            event: One of 'started', 'success', 'error'
+        """
+        payload = {"id": notification_template_id, "disassociate": True}
+        return await self._request(
+            "POST", f"/api/v2/job_templates/{template_id}/notification_templates_{event}/",
+            json=payload,
+        )
+
+    async def create_notification_template(
+        self,
+        name: str,
+        organization: int,
+        notification_type: str,
+        notification_configuration: Optional[dict[str, Any]] = None,
+        description: str = "",
+        messages: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Create notification template."""
+        payload: dict[str, Any] = {
+            "name": name,
+            "organization": organization,
+            "notification_type": notification_type,
+            "description": description,
+        }
+        if notification_configuration:
+            payload["notification_configuration"] = notification_configuration
+        if messages:
+            payload["messages"] = messages
+
+        return await self._request("POST", "/api/v2/notification_templates/", json=payload)
+
+    async def update_notification_template(
+        self, template_id: int, **kwargs: Any
+    ) -> dict[str, Any]:
+        """Update notification template (partial update)."""
+        payload = {k: v for k, v in kwargs.items() if v is not None}
+        return await self._request("PATCH", f"/api/v2/notification_templates/{template_id}/", json=payload)
+
+    async def delete_notification_template(self, template_id: int) -> None:
+        """Delete notification template."""
+        await self.client.request("DELETE", f"/api/v2/notification_templates/{template_id}/")
+
+    async def test_notification_template(self, template_id: int) -> dict[str, Any]:
+        """Send a test notification from a notification template."""
+        return await self._request("POST", f"/api/v2/notification_templates/{template_id}/test/")
+
+    async def list_notifications(
+        self,
+        notification_template_id: Optional[int] = None,
+        status: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 25,
+    ) -> list[dict[str, Any]]:
+        """List sent notifications (delivery history)."""
+        params: dict[str, Any] = {"page": page, "page_size": page_size, "order_by": "-created"}
+        if status:
+            params["status"] = status
+        if notification_template_id:
+            data = await self._request(
+                "GET",
+                f"/api/v2/notification_templates/{notification_template_id}/notifications/",
+                params=params,
+            )
+        else:
+            data = await self._request("GET", "/api/v2/notifications/", params=params)
+        return data.get("results", [])
+
+    # Workflow Job Template Notification Associations
+
+    async def list_workflow_template_notification_templates(
+        self, template_id: int, event: str
+    ) -> list[dict[str, Any]]:
+        """List notification templates associated with a workflow job template for a given event."""
+        data = await self._request(
+            "GET", f"/api/v2/workflow_job_templates/{template_id}/notification_templates_{event}/"
+        )
+        return data.get("results", [])
+
+    async def associate_workflow_template_notification(
+        self, template_id: int, notification_template_id: int, event: str
+    ) -> dict[str, Any]:
+        """Associate a notification template with a workflow job template for a given event."""
+        payload = {"id": notification_template_id}
+        return await self._request(
+            "POST", f"/api/v2/workflow_job_templates/{template_id}/notification_templates_{event}/",
+            json=payload,
+        )
+
+    async def disassociate_workflow_template_notification(
+        self, template_id: int, notification_template_id: int, event: str
+    ) -> dict[str, Any]:
+        """Disassociate a notification template from a workflow job template for a given event."""
+        payload = {"id": notification_template_id, "disassociate": True}
+        return await self._request(
+            "POST", f"/api/v2/workflow_job_templates/{template_id}/notification_templates_{event}/",
+            json=payload,
+        )
+
     async def list_job_templates(
         self, name_filter: Optional[str] = None, page: int = 1, page_size: int = 25
     ) -> list[JobTemplate]:
