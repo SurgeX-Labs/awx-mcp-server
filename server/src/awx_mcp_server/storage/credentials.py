@@ -15,7 +15,7 @@ class CredentialStore:
     def __init__(self, tenant_id: Optional[str] = None):
         """
         Initialize credential store.
-        
+
         Args:
             tenant_id: Tenant ID for multi-tenant isolation (optional)
         """
@@ -41,16 +41,18 @@ class CredentialStore:
             credential_type: Type of credential (password or token)
             username: Username (required for password auth)
             secret: Password or token value
-        
+
         Raises:
             CredentialError: If storage fails
         """
         try:
             key = self._make_key(env_id, credential_type)
-            
+
             if credential_type == CredentialType.PASSWORD:
                 if not username:
-                    raise CredentialError("Username required for password authentication")
+                    raise CredentialError(
+                        "Username required for password authentication"
+                    )
                 # Store username separately
                 keyring.set_password(self.service_name, f"{key}:username", username)
                 keyring.set_password(self.service_name, f"{key}:password", secret)
@@ -69,30 +71,32 @@ class CredentialStore:
         Args:
             env_id: Environment UUID
             credential_type: Type of credential
-        
+
         Returns:
             Tuple of (username, secret) - username is None for token auth
-        
+
         Raises:
             CredentialError: If retrieval fails or credential not found
         """
         try:
             key = self._make_key(env_id, credential_type)
-            
+
             if credential_type == CredentialType.PASSWORD:
                 username = keyring.get_password(self.service_name, f"{key}:username")
                 password = keyring.get_password(self.service_name, f"{key}:password")
-                
+
                 if not username or not password:
-                    raise CredentialError(f"Credential not found for environment {env_id}")
-                
+                    raise CredentialError(
+                        f"Credential not found for environment {env_id}"
+                    )
+
                 return username, password
             else:
                 token = keyring.get_password(self.service_name, f"{key}:token")
-                
+
                 if not token:
                     raise CredentialError(f"Token not found for environment {env_id}")
-                
+
                 return None, token
         except Exception as e:
             if isinstance(e, CredentialError):
@@ -128,7 +132,7 @@ class CredentialStore:
 
         Args:
             env_id: Environment UUID
-        
+
         Returns:
             True if credential exists
         """
@@ -138,7 +142,7 @@ class CredentialStore:
             password = keyring.get_password(self.service_name, f"{key}:password")
             if password:
                 return True
-            
+
             # Check for token auth
             key = self._make_key(env_id, CredentialType.TOKEN)
             token = keyring.get_password(self.service_name, f"{key}:token")

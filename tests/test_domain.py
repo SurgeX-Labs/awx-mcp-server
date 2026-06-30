@@ -4,7 +4,7 @@ import pytest
 from datetime import datetime
 from pydantic import ValidationError
 
-from awx_mcp.domain import (
+from awx_mcp_server.domain import (
     EnvironmentConfig,
     JobStatus,
     FailureCategory,
@@ -20,7 +20,7 @@ def test_environment_config_valid():
         base_url="https://awx.example.com",
         verify_ssl=True,
     )
-    
+
     assert config.name == "production"
     assert str(config.base_url) == "https://awx.example.com/"
     assert config.verify_ssl is True
@@ -68,7 +68,7 @@ def test_job_template():
         project=5,
         playbook="deploy.yml",
     )
-    
+
     assert template.id == 1
     assert template.name == "Deploy Web App"
     assert template.playbook == "deploy.yml"
@@ -83,7 +83,7 @@ def test_job():
         playbook="deploy.yml",
         started=datetime.utcnow(),
     )
-    
+
     assert job.id == 100
     assert job.status == JobStatus.RUNNING
     assert job.started is not None

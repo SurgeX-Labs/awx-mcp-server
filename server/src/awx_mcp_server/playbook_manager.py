@@ -6,9 +6,6 @@ and roles locally before pushing to AWX via SCM.
 
 import asyncio
 import json
-import os
-import shutil
-import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
@@ -50,8 +47,8 @@ def create_playbook(
     ws = _ensure_workspace(workspace)
 
     # Ensure .yml extension
-    if not name.endswith(('.yml', '.yaml')):
-        name += '.yml'
+    if not name.endswith((".yml", ".yaml")):
+        name += ".yml"
 
     playbook_path = ws / name
 
@@ -79,13 +76,19 @@ def create_playbook(
         yaml_content = yaml.dump(content, default_flow_style=False, sort_keys=False)
         parsed = content
     else:
-        return {"status": "error", "message": "Content must be a YAML string, dict, or list"}
+        return {
+            "status": "error",
+            "message": "Content must be a YAML string, dict, or list",
+        }
 
     # Validate structure - playbook must be a list of plays
     if isinstance(parsed, dict):
         parsed = [parsed]
     if not isinstance(parsed, list):
-        return {"status": "error", "message": "Playbook must be a list of plays (YAML list)"}
+        return {
+            "status": "error",
+            "message": "Playbook must be a list of plays (YAML list)",
+        }
 
     # Write playbook
     playbook_path.write_text(yaml_content, encoding="utf-8")
@@ -451,7 +454,7 @@ def create_role_structure(
         if subdir not in ("templates", "files"):
             main_file = dir_path / "main.yml"
             if subdir == "tasks":
-                content = f"---\n# Tasks for role: {name}\n- name: Example task\n  ansible.builtin.debug:\n    msg: \"Role {name} is running\"\n"
+                content = f'---\n# Tasks for role: {name}\n- name: Example task\n  ansible.builtin.debug:\n    msg: "Role {name} is running"\n'
             elif subdir == "handlers":
                 content = f"---\n# Handlers for role: {name}\n"
             elif subdir == "vars":
@@ -519,12 +522,14 @@ def list_playbooks(workspace: Optional[str] = None) -> dict[str, Any]:
         except Exception:
             plays = None
 
-        playbooks.append({
-            "name": f.name,
-            "path": str(f),
-            "size": f.stat().st_size,
-            "plays": plays,
-        })
+        playbooks.append(
+            {
+                "name": f.name,
+                "path": str(f),
+                "size": f.stat().st_size,
+                "plays": plays,
+            }
+        )
 
     return {
         "workspace": str(ws),
@@ -553,11 +558,13 @@ def list_roles(workspace: Optional[str] = None) -> dict[str, Any]:
     for d in sorted(roles_dir.iterdir()):
         if d.is_dir():
             subdirs = [s.name for s in d.iterdir() if s.is_dir()]
-            roles.append({
-                "name": d.name,
-                "path": str(d),
-                "directories": subdirs,
-            })
+            roles.append(
+                {
+                    "name": d.name,
+                    "path": str(d),
+                    "directories": subdirs,
+                }
+            )
 
     return {
         "workspace": str(ws),

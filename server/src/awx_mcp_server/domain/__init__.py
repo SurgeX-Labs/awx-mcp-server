@@ -30,6 +30,9 @@ from awx_mcp_server.domain.models import (
     JobTemplate,
     PlatformType,
     Project,
+    WorkflowJob,
+    WorkflowJobNode,
+    WorkflowJobTemplate,
 )
 
 __all__ = [
@@ -62,4 +65,7 @@ __all__ = [
     "FailureAnalysis",
     "FailureCategory",
     "AuditLog",
+    "WorkflowJobTemplate",
+    "WorkflowJob",
+    "WorkflowJobNode",
 ]

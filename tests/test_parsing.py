@@ -1,7 +1,7 @@
 """Tests for failure analysis."""
 
-from awx_mcp.domain import JobEvent, FailureCategory
-from awx_mcp.utils import analyze_job_failure
+from awx_mcp_server.domain import JobEvent, FailureCategory
+from awx_mcp_server.utils import analyze_job_failure
 
 
 def test_analyze_auth_failure():
@@ -20,9 +20,9 @@ def test_analyze_auth_failure():
             event_data={"res": {"stderr": "Permission denied (publickey,password)"}},
         )
     ]
-    
+
     analysis = analyze_job_failure(123, events, "")
-    
+
     assert analysis.category == FailureCategory.AUTH_FAILURE
     assert analysis.host == "web01"
     assert len(analysis.suggested_fixes) > 0
@@ -50,9 +50,9 @@ def test_analyze_missing_variable():
             },
         )
     ]
-    
+
     analysis = analyze_job_failure(123, events, "")
-    
+
     assert analysis.category == FailureCategory.MISSING_VARIABLE
     assert len(analysis.suggested_fixes) > 0
     assert any("variable" in fix.lower() for fix in analysis.suggested_fixes)
@@ -74,12 +74,15 @@ def test_analyze_syntax_error():
             event_data={"res": {"stderr": "Syntax Error while loading YAML"}},
         )
     ]
-    
+
     analysis = analyze_job_failure(123, events, "")
-    
+
     assert analysis.category == FailureCategory.SYNTAX_ERROR
     assert len(analysis.suggested_fixes) > 0
-    assert any("syntax" in fix.lower() or "yaml" in fix.lower() for fix in analysis.suggested_fixes)
+    assert any(
+        "syntax" in fix.lower() or "yaml" in fix.lower()
+        for fix in analysis.suggested_fixes
+    )
 
 
 def test_analyze_connection_timeout():
@@ -98,12 +101,15 @@ def test_analyze_connection_timeout():
             event_data={"res": {"msg": "Connection timed out"}},
         )
     ]
-    
+
     analysis = analyze_job_failure(123, events, "")
-    
+
     assert analysis.category == FailureCategory.CONNECTION_TIMEOUT
     assert len(analysis.suggested_fixes) > 0
-    assert any("timeout" in fix.lower() or "network" in fix.lower() for fix in analysis.suggested_fixes)
+    assert any(
+        "timeout" in fix.lower() or "network" in fix.lower()
+        for fix in analysis.suggested_fixes
+    )
 
 
 def test_analyze_no_failed_events():
@@ -119,8 +125,8 @@ def test_analyze_no_failed_events():
             host="web01",
         )
     ]
-    
+
     analysis = analyze_job_failure(123, events, "")
-    
+
     assert analysis.category == FailureCategory.UNKNOWN
     assert len(analysis.suggested_fixes) > 0

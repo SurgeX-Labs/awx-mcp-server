@@ -10,7 +10,6 @@ This script verifies:
 
 import asyncio
 import os
-from uuid import uuid4
 
 # Test imports
 from awx_mcp_server.domain import (
@@ -18,21 +17,22 @@ from awx_mcp_server.domain import (
     PlatformType,
 )
 
+
 def test_platform_types():
     """Test that all platform types are available."""
     print("✅ Testing PlatformType enum...")
-    
+
     assert PlatformType.AWX == "awx"
     assert PlatformType.AAP == "aap"
     assert PlatformType.TOWER == "tower"
-    
+
     print("   ✓ All platform types defined correctly")
 
 
 def test_environment_config():
     """Test environment configuration with different platforms."""
     print("\n✅ Testing EnvironmentConfig with different platforms...")
-    
+
     # Test AWX
     env_awx = EnvironmentConfig(
         name="test-awx",
@@ -41,7 +41,7 @@ def test_environment_config():
     )
     assert env_awx.platform_type == PlatformType.AWX
     print("   ✓ AWX environment config works")
-    
+
     # Test AAP
     env_aap = EnvironmentConfig(
         name="test-aap",
@@ -50,7 +50,7 @@ def test_environment_config():
     )
     assert env_aap.platform_type == PlatformType.AAP
     print("   ✓ AAP environment config works")
-    
+
     # Test Tower
     env_tower = EnvironmentConfig(
         name="test-tower",
@@ -59,7 +59,7 @@ def test_environment_config():
     )
     assert env_tower.platform_type == PlatformType.TOWER
     print("   ✓ Tower environment config works")
-    
+
     # Test default (should be AWX)
     env_default = EnvironmentConfig(
         name="test-default",
@@ -72,35 +72,35 @@ def test_environment_config():
 def test_environment_variable_parsing():
     """Test that AWX_PLATFORM environment variable is parsed correctly."""
     print("\n✅ Testing AWX_PLATFORM environment variable parsing...")
-    
+
     # Save original env vars
     original_platform = os.getenv("AWX_PLATFORM")
-    
+
     try:
         # Test AWX
         os.environ["AWX_PLATFORM"] = "awx"
         platform = PlatformType(os.getenv("AWX_PLATFORM", "awx").lower())
         assert platform == PlatformType.AWX
         print("   ✓ AWX_PLATFORM=awx parsed correctly")
-        
+
         # Test AAP
         os.environ["AWX_PLATFORM"] = "aap"
         platform = PlatformType(os.getenv("AWX_PLATFORM", "awx").lower())
         assert platform == PlatformType.AAP
         print("   ✓ AWX_PLATFORM=aap parsed correctly")
-        
+
         # Test TOWER
         os.environ["AWX_PLATFORM"] = "tower"
         platform = PlatformType(os.getenv("AWX_PLATFORM", "awx").lower())
         assert platform == PlatformType.TOWER
         print("   ✓ AWX_PLATFORM=tower parsed correctly")
-        
+
         # Test case insensitivity
         os.environ["AWX_PLATFORM"] = "AAP"
         platform = PlatformType(os.getenv("AWX_PLATFORM", "awx").lower())
         assert platform == PlatformType.AAP
         print("   ✓ AWX_PLATFORM is case-insensitive")
-        
+
     finally:
         # Restore original env var
         if original_platform:
@@ -112,18 +112,18 @@ def test_environment_variable_parsing():
 def test_json_serialization():
     """Test that environment config can be serialized to JSON."""
     print("\n✅ Testing JSON serialization...")
-    
+
     env = EnvironmentConfig(
         name="test-serialization",
         base_url="https://aap.example.com",
         platform_type=PlatformType.AAP,
     )
-    
+
     # Serialize to JSON
     json_data = env.model_dump_json()
     assert "aap" in json_data
     print("   ✓ Environment config serializes to JSON correctly")
-    
+
     # Deserialize from JSON
     env_restored = EnvironmentConfig.model_validate_json(json_data)
     assert env_restored.platform_type == PlatformType.AAP
@@ -134,14 +134,14 @@ def test_json_serialization():
 async def test_remote_server_health():
     """Test that remote server responds to health checks."""
     print("\n✅ Testing remote server health endpoint...")
-    
+
     try:
         import httpx
-        
+
         # Check if server is running on localhost:8000
         async with httpx.AsyncClient() as client:
             response = await client.get("http://localhost:8000/health", timeout=5.0)
-            
+
             if response.status_code == 200:
                 data = response.json()
                 assert data["status"] == "healthy"
@@ -151,7 +151,7 @@ async def test_remote_server_health():
             else:
                 print(f"   ⚠ Server returned status {response.status_code}")
                 return False
-                
+
     except httpx.ConnectError:
         print("   ℹ Server not running on localhost:8000 (this is OK for testing)")
         return None
@@ -165,17 +165,17 @@ def main():
     print("=" * 70)
     print("AWX MCP Server - AAP Support & Remote Server Tests")
     print("=" * 70)
-    
+
     try:
         # Unit tests
         test_platform_types()
         test_environment_config()
         test_environment_variable_parsing()
         test_json_serialization()
-        
+
         # Integration test
         asyncio.run(test_remote_server_health())
-        
+
         print("\n" + "=" * 70)
         print("✅ All tests passed!")
         print("=" * 70)
@@ -186,7 +186,7 @@ def main():
         print("   • JSON serialization/deserialization works")
         print("   • Remote server health check (if running)")
         print("\n🎉 AWX/AAP/Tower support is fully functional!")
-        
+
     except AssertionError as e:
         print(f"\n❌ Test failed: {e}")
         raise

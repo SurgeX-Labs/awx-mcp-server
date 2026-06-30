@@ -6,7 +6,12 @@ from datetime import datetime
 from typing import Any, Optional
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from awx_mcp_server.clients.base import AWXClient
 from awx_mcp_server.domain import (
@@ -20,6 +25,9 @@ from awx_mcp_server.domain import (
     JobStatus,
     JobTemplate,
     Project,
+    WorkflowJob,
+    WorkflowJobNode,
+    WorkflowJobTemplate,
 )
 
 
@@ -44,7 +52,7 @@ class RestAWXClient(AWXClient):
         """
         self.config = config
         self.base_url = str(config.base_url).rstrip("/")
-        
+
         # Setup auth
         if is_token:
             self.auth = None
@@ -52,7 +60,7 @@ class RestAWXClient(AWXClient):
         else:
             self.auth = httpx.BasicAuth(username or "", secret)
             self.headers = {}
-        
+
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
             auth=self.auth,
@@ -72,10 +80,10 @@ class RestAWXClient(AWXClient):
     def _parse_extra_vars(self, extra_vars: Any) -> dict[str, Any]:
         """
         Parse extra_vars field from AWX API.
-        
+
         Args:
             extra_vars: Extra vars value (can be dict, string, or empty)
-        
+
         Returns:
             Parsed dictionary
         """
@@ -89,8 +97,33 @@ class RestAWXClient(AWXClient):
                     return {}
         return {}
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
     async def _request(
+        self, method: str, endpoint: str, **kwargs: Any
+    ) -> dict[str, Any]:
+        """Dispatch an HTTP request.
+
+        Idempotent reads (GET) are retried on transient connection errors.
+        Mutating methods (POST/PUT/PATCH/DELETE) are NOT retried, so a
+        launch/create that times out after the server already acted is not
+        replayed into a duplicate.
+        """
+        if method.upper() == "GET":
+            return await self._request_with_retry(method, endpoint, **kwargs)
+        return await self._do_request(method, endpoint, **kwargs)
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(AWXConnectionError),
+        reraise=True,
+    )
+    async def _request_with_retry(
+        self, method: str, endpoint: str, **kwargs: Any
+    ) -> dict[str, Any]:
+        """Retry wrapper for idempotent requests (transient connection errors only)."""
+        return await self._do_request(method, endpoint, **kwargs)
+
+    async def _do_request(
         self, method: str, endpoint: str, **kwargs: Any
     ) -> dict[str, Any]:
         """
@@ -100,21 +133,22 @@ class RestAWXClient(AWXClient):
             method: HTTP method
             endpoint: API endpoint
             **kwargs: Additional request arguments
-        
+
         Returns:
             Response JSON
-        
+
         Raises:
             AWXAuthenticationError: Authentication failed
             AWXConnectionError: Connection failed
             AWXClientError: Other client errors
         """
         from awx_mcp_server.utils import get_logger
+
         logger = get_logger(__name__)
-        
+
         try:
             response = await self.client.request(method, endpoint, **kwargs)
-            
+
             if response.status_code == 401:
                 raise AWXAuthenticationError("Authentication failed")
             elif response.status_code == 403:
@@ -135,9 +169,16 @@ class RestAWXClient(AWXClient):
                     error_detail = error_json.get("detail", error_detail)
                 except Exception:
                     pass
-                logger.error(f"AWX API error {response.status_code} on {endpoint}: {error_detail}")
-                raise AWXClientError(f"API error {response.status_code}: {error_detail}")
-            
+                logger.error(
+                    f"AWX API error {response.status_code} on {endpoint}: {error_detail}"
+                )
+                raise AWXClientError(
+                    f"API error {response.status_code}: {error_detail}"
+                )
+
+            # 204 No Content (e.g. DELETE) and empty bodies have no JSON.
+            if response.status_code == 204 or not response.content:
+                return {}
             return response.json()
         except httpx.ConnectError as e:
             logger.error(f"Connection error to {endpoint}: {e}")
@@ -158,31 +199,31 @@ class RestAWXClient(AWXClient):
             return True
         except Exception:
             return False
-    
+
     # Authentication & General Info
-    
+
     async def get_me(self) -> dict[str, Any]:
         """Get current user information."""
         return await self._request("GET", "/api/v2/me/")
-    
+
     async def get_config(self) -> dict[str, Any]:
         """Get AWX system configuration."""
         return await self._request("GET", "/api/v2/config/")
-    
+
     async def get_dashboard(self) -> dict[str, Any]:
         """Get AWX dashboard data."""
         return await self._request("GET", "/api/v2/dashboard/")
-    
+
     async def get_settings(self) -> dict[str, Any]:
         """Get AWX settings."""
         return await self._request("GET", "/api/v2/settings/")
-    
+
     async def request_auth_token(self) -> dict[str, Any]:
         """Request authentication token."""
         return await self._request("POST", "/api/v2/authtoken/")
-    
+
     # Organizations
-    
+
     async def list_organizations(
         self, name_filter: Optional[str] = None, page: int = 1, page_size: int = 25
     ) -> list[dict[str, Any]]:
@@ -190,16 +231,16 @@ class RestAWXClient(AWXClient):
         params = {"page": page, "page_size": page_size}
         if name_filter:
             params["name__icontains"] = name_filter
-        
+
         data = await self._request("GET", "/api/v2/organizations/", params=params)
         return data.get("results", [])
-    
+
     async def get_organization(self, org_id: int) -> dict[str, Any]:
         """Get organization by ID."""
         return await self._request("GET", f"/api/v2/organizations/{org_id}/")
-    
+
     # Credentials
-    
+
     async def list_credential_types(
         self, page: int = 1, page_size: int = 25
     ) -> list[dict[str, Any]]:
@@ -207,11 +248,11 @@ class RestAWXClient(AWXClient):
         params = {"page": page, "page_size": page_size}
         data = await self._request("GET", "/api/v2/credential_types/", params=params)
         return data.get("results", [])
-    
+
     async def get_credential_type(self, cred_type_id: int) -> dict[str, Any]:
         """Get credential type by ID."""
         return await self._request("GET", f"/api/v2/credential_types/{cred_type_id}/")
-    
+
     async def list_credentials(
         self, name_filter: Optional[str] = None, page: int = 1, page_size: int = 25
     ) -> list[dict[str, Any]]:
@@ -219,14 +260,14 @@ class RestAWXClient(AWXClient):
         params = {"page": page, "page_size": page_size}
         if name_filter:
             params["name__icontains"] = name_filter
-        
+
         data = await self._request("GET", "/api/v2/credentials/", params=params)
         return data.get("results", [])
-    
+
     async def get_credential(self, cred_id: int) -> dict[str, Any]:
         """Get credential by ID."""
         return await self._request("GET", f"/api/v2/credentials/{cred_id}/")
-    
+
     async def create_credential(
         self,
         name: str,
@@ -244,10 +285,183 @@ class RestAWXClient(AWXClient):
             "description": description,
         }
         return await self._request("POST", "/api/v2/credentials/", json=payload)
-    
+
     async def delete_credential(self, cred_id: int) -> None:
         """Delete credential."""
-        await self.client.request("DELETE", f"/api/v2/credentials/{cred_id}/")
+        await self._request("DELETE", f"/api/v2/credentials/{cred_id}/")
+
+    # Notification Templates
+
+    async def list_notification_templates(
+        self, name_filter: Optional[str] = None, page: int = 1, page_size: int = 25
+    ) -> list[dict[str, Any]]:
+        """List notification templates."""
+        params = {"page": page, "page_size": page_size}
+        if name_filter:
+            params["name__icontains"] = name_filter
+
+        data = await self._request(
+            "GET", "/api/v2/notification_templates/", params=params
+        )
+        return data.get("results", [])
+
+    async def get_notification_template(self, template_id: int) -> dict[str, Any]:
+        """Get notification template by ID."""
+        return await self._request(
+            "GET", f"/api/v2/notification_templates/{template_id}/"
+        )
+
+    async def list_job_template_notification_templates(
+        self, template_id: int, event: str
+    ) -> list[dict[str, Any]]:
+        """List notification templates associated with a job template for a given event.
+
+        Args:
+            template_id: Job template ID
+            event: One of 'started', 'success', 'error'
+        """
+        data = await self._request(
+            "GET",
+            f"/api/v2/job_templates/{template_id}/notification_templates_{event}/",
+        )
+        return data.get("results", [])
+
+    async def associate_job_template_notification(
+        self, template_id: int, notification_template_id: int, event: str
+    ) -> dict[str, Any]:
+        """Associate a notification template with a job template for a given event.
+
+        Args:
+            template_id: Job template ID
+            notification_template_id: Notification template ID to attach
+            event: One of 'started', 'success', 'error'
+        """
+        payload = {"id": notification_template_id}
+        return await self._request(
+            "POST",
+            f"/api/v2/job_templates/{template_id}/notification_templates_{event}/",
+            json=payload,
+        )
+
+    async def disassociate_job_template_notification(
+        self, template_id: int, notification_template_id: int, event: str
+    ) -> dict[str, Any]:
+        """Disassociate a notification template from a job template for a given event.
+
+        Args:
+            template_id: Job template ID
+            notification_template_id: Notification template ID to remove
+            event: One of 'started', 'success', 'error'
+        """
+        payload = {"id": notification_template_id, "disassociate": True}
+        return await self._request(
+            "POST",
+            f"/api/v2/job_templates/{template_id}/notification_templates_{event}/",
+            json=payload,
+        )
+
+    async def create_notification_template(
+        self,
+        name: str,
+        organization: int,
+        notification_type: str,
+        notification_configuration: Optional[dict[str, Any]] = None,
+        description: str = "",
+        messages: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Create notification template."""
+        payload: dict[str, Any] = {
+            "name": name,
+            "organization": organization,
+            "notification_type": notification_type,
+            "description": description,
+        }
+        if notification_configuration:
+            payload["notification_configuration"] = notification_configuration
+        if messages:
+            payload["messages"] = messages
+
+        return await self._request(
+            "POST", "/api/v2/notification_templates/", json=payload
+        )
+
+    async def update_notification_template(
+        self, template_id: int, **kwargs: Any
+    ) -> dict[str, Any]:
+        """Update notification template (partial update)."""
+        payload = {k: v for k, v in kwargs.items() if v is not None}
+        return await self._request(
+            "PATCH", f"/api/v2/notification_templates/{template_id}/", json=payload
+        )
+
+    async def delete_notification_template(self, template_id: int) -> None:
+        """Delete notification template."""
+        await self._request("DELETE", f"/api/v2/notification_templates/{template_id}/")
+
+    async def test_notification_template(self, template_id: int) -> dict[str, Any]:
+        """Send a test notification from a notification template."""
+        return await self._request(
+            "POST", f"/api/v2/notification_templates/{template_id}/test/"
+        )
+
+    async def list_notifications(
+        self,
+        notification_template_id: Optional[int] = None,
+        status: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 25,
+    ) -> list[dict[str, Any]]:
+        """List sent notifications (delivery history)."""
+        params: dict[str, Any] = {
+            "page": page,
+            "page_size": page_size,
+            "order_by": "-created",
+        }
+        if status:
+            params["status"] = status
+        if notification_template_id:
+            data = await self._request(
+                "GET",
+                f"/api/v2/notification_templates/{notification_template_id}/notifications/",
+                params=params,
+            )
+        else:
+            data = await self._request("GET", "/api/v2/notifications/", params=params)
+        return data.get("results", [])
+
+    # Workflow Job Template Notification Associations
+
+    async def list_workflow_template_notification_templates(
+        self, template_id: int, event: str
+    ) -> list[dict[str, Any]]:
+        """List notification templates associated with a workflow job template for a given event."""
+        data = await self._request(
+            "GET",
+            f"/api/v2/workflow_job_templates/{template_id}/notification_templates_{event}/",
+        )
+        return data.get("results", [])
+
+    async def associate_workflow_template_notification(
+        self, template_id: int, notification_template_id: int, event: str
+    ) -> dict[str, Any]:
+        """Associate a notification template with a workflow job template for a given event."""
+        payload = {"id": notification_template_id}
+        return await self._request(
+            "POST",
+            f"/api/v2/workflow_job_templates/{template_id}/notification_templates_{event}/",
+            json=payload,
+        )
+
+    async def disassociate_workflow_template_notification(
+        self, template_id: int, notification_template_id: int, event: str
+    ) -> dict[str, Any]:
+        """Disassociate a notification template from a workflow job template for a given event."""
+        payload = {"id": notification_template_id, "disassociate": True}
+        return await self._request(
+            "POST",
+            f"/api/v2/workflow_job_templates/{template_id}/notification_templates_{event}/",
+            json=payload,
+        )
 
     async def list_job_templates(
         self, name_filter: Optional[str] = None, page: int = 1, page_size: int = 25
@@ -256,28 +470,30 @@ class RestAWXClient(AWXClient):
         params = {"page": page, "page_size": page_size}
         if name_filter:
             params["name__icontains"] = name_filter
-        
+
         data = await self._request("GET", "/api/v2/job_templates/", params=params)
-        
+
         templates = []
         for item in data.get("results", []):
-            templates.append(JobTemplate(
-                id=item["id"],
-                name=item["name"],
-                description=item.get("description"),
-                job_type=item.get("job_type", "run"),
-                inventory=item.get("inventory"),
-                project=item["project"],
-                playbook=item["playbook"],
-                extra_vars=self._parse_extra_vars(item.get("extra_vars", {})),
-            ))
-        
+            templates.append(
+                JobTemplate(
+                    id=item["id"],
+                    name=item["name"],
+                    description=item.get("description"),
+                    job_type=item.get("job_type", "run"),
+                    inventory=item.get("inventory"),
+                    project=item["project"],
+                    playbook=item["playbook"],
+                    extra_vars=self._parse_extra_vars(item.get("extra_vars", {})),
+                )
+            )
+
         return templates
 
     async def get_job_template(self, template_id: int) -> JobTemplate:
         """Get job template by ID."""
         data = await self._request("GET", f"/api/v2/job_templates/{template_id}/")
-        
+
         return JobTemplate(
             id=data["id"],
             name=data["name"],
@@ -288,7 +504,7 @@ class RestAWXClient(AWXClient):
             playbook=data["playbook"],
             extra_vars=self._parse_extra_vars(data.get("extra_vars", {})),
         )
-    
+
     async def create_job_template(
         self,
         name: str,
@@ -313,7 +529,7 @@ class RestAWXClient(AWXClient):
             payload["extra_vars"] = json.dumps(extra_vars)
         if limit:
             payload["limit"] = limit
-        
+
         data = await self._request("POST", "/api/v2/job_templates/", json=payload)
         return JobTemplate(
             id=data["id"],
@@ -325,21 +541,25 @@ class RestAWXClient(AWXClient):
             playbook=data["playbook"],
             extra_vars=self._parse_extra_vars(data.get("extra_vars", {})),
         )
-    
+
     async def delete_job_template(self, template_id: int) -> None:
         """Delete job template."""
-        await self.client.request("DELETE", f"/api/v2/job_templates/{template_id}/")
-    
-    async def add_credential_to_template(self, template_id: int, credential_id: int) -> dict[str, Any]:
+        await self._request("DELETE", f"/api/v2/job_templates/{template_id}/")
+
+    async def add_credential_to_template(
+        self, template_id: int, credential_id: int
+    ) -> dict[str, Any]:
         """Add credential to job template."""
         payload = {"id": credential_id}
         return await self._request(
             "POST", f"/api/v2/job_templates/{template_id}/credentials/", json=payload
         )
-    
+
     async def get_job_template_launch_info(self, template_id: int) -> dict[str, Any]:
         """Get job template launch details."""
-        return await self._request("GET", f"/api/v2/job_templates/{template_id}/launch/")
+        return await self._request(
+            "GET", f"/api/v2/job_templates/{template_id}/launch/"
+        )
 
     async def list_projects(
         self, name_filter: Optional[str] = None, page: int = 1, page_size: int = 25
@@ -348,9 +568,9 @@ class RestAWXClient(AWXClient):
         params = {"page": page, "page_size": page_size}
         if name_filter:
             params["name__icontains"] = name_filter
-        
+
         data = await self._request("GET", "/api/v2/projects/", params=params)
-        
+
         return [
             Project(
                 id=item["id"],
@@ -367,7 +587,7 @@ class RestAWXClient(AWXClient):
     async def get_project(self, project_id: int) -> Project:
         """Get project by ID."""
         data = await self._request("GET", f"/api/v2/projects/{project_id}/")
-        
+
         return Project(
             id=data["id"],
             name=data["name"],
@@ -377,7 +597,7 @@ class RestAWXClient(AWXClient):
             scm_branch=data.get("scm_branch"),
             status=data.get("status"),
         )
-    
+
     async def create_project(
         self,
         name: str,
@@ -397,7 +617,7 @@ class RestAWXClient(AWXClient):
         if scm_url:
             payload["scm_url"] = scm_url
             payload["scm_branch"] = scm_branch
-        
+
         data = await self._request("POST", "/api/v2/projects/", json=payload)
         return Project(
             id=data["id"],
@@ -408,15 +628,17 @@ class RestAWXClient(AWXClient):
             scm_branch=data.get("scm_branch"),
             status=data.get("status"),
         )
-    
+
     async def delete_project(self, project_id: int) -> None:
         """Delete project."""
-        await self.client.request("DELETE", f"/api/v2/projects/{project_id}/")
+        await self._request("DELETE", f"/api/v2/projects/{project_id}/")
 
-    async def update_project(self, project_id: int, wait: bool = True) -> dict[str, Any]:
+    async def update_project(
+        self, project_id: int, wait: bool = True
+    ) -> dict[str, Any]:
         """Update project from SCM."""
         data = await self._request("POST", f"/api/v2/projects/{project_id}/update/")
-        
+
         if wait and "id" in data:
             # Wait for project update to complete
             update_id = data["id"]
@@ -428,7 +650,7 @@ class RestAWXClient(AWXClient):
                 if status in ["successful", "failed", "error", "canceled"]:
                     break
                 await asyncio.sleep(1)
-        
+
         return data
 
     async def list_inventories(
@@ -438,9 +660,9 @@ class RestAWXClient(AWXClient):
         params = {"page": page, "page_size": page_size}
         if name_filter:
             params["name__icontains"] = name_filter
-        
+
         data = await self._request("GET", "/api/v2/inventories/", params=params)
-        
+
         return [
             Inventory(
                 id=item["id"],
@@ -452,7 +674,7 @@ class RestAWXClient(AWXClient):
             )
             for item in data.get("results", [])
         ]
-    
+
     async def get_inventory(self, inventory_id: int) -> Inventory:
         """Get inventory by ID."""
         data = await self._request("GET", f"/api/v2/inventories/{inventory_id}/")
@@ -464,9 +686,13 @@ class RestAWXClient(AWXClient):
             total_hosts=data.get("total_hosts", 0),
             hosts_with_active_failures=data.get("hosts_with_active_failures", 0),
         )
-    
+
     async def create_inventory(
-        self, name: str, organization: int, description: str = "", variables: Optional[dict] = None
+        self,
+        name: str,
+        organization: int,
+        description: str = "",
+        variables: Optional[dict] = None,
     ) -> Inventory:
         """Create inventory."""
         payload = {
@@ -476,7 +702,7 @@ class RestAWXClient(AWXClient):
         }
         if variables:
             payload["variables"] = json.dumps(variables)
-        
+
         data = await self._request("POST", "/api/v2/inventories/", json=payload)
         return Inventory(
             id=data["id"],
@@ -486,54 +712,70 @@ class RestAWXClient(AWXClient):
             total_hosts=data.get("total_hosts", 0),
             hosts_with_active_failures=data.get("hosts_with_active_failures", 0),
         )
-    
+
     async def delete_inventory(self, inventory_id: int) -> None:
         """Delete inventory."""
-        await self.client.request("DELETE", f"/api/v2/inventories/{inventory_id}/")
-    
+        await self._request("DELETE", f"/api/v2/inventories/{inventory_id}/")
+
     async def list_inventory_groups(
         self, inventory_id: int, page: int = 1, page_size: int = 25
     ) -> list[dict[str, Any]]:
         """List groups in inventory."""
         params = {"page": page, "page_size": page_size}
-        data = await self._request("GET", f"/api/v2/inventories/{inventory_id}/groups/", params=params)
+        data = await self._request(
+            "GET", f"/api/v2/inventories/{inventory_id}/groups/", params=params
+        )
         return data.get("results", [])
-    
+
     async def create_inventory_group(
-        self, inventory_id: int, name: str, description: str = "", variables: Optional[dict] = None
+        self,
+        inventory_id: int,
+        name: str,
+        description: str = "",
+        variables: Optional[dict] = None,
     ) -> dict[str, Any]:
         """Create group in inventory."""
         payload = {"name": name, "description": description}
         if variables:
             payload["variables"] = json.dumps(variables)
-        
-        return await self._request("POST", f"/api/v2/inventories/{inventory_id}/groups/", json=payload)
-    
+
+        return await self._request(
+            "POST", f"/api/v2/inventories/{inventory_id}/groups/", json=payload
+        )
+
     async def delete_inventory_group(self, group_id: int) -> None:
         """Delete inventory group."""
-        await self.client.request("DELETE", f"/api/v2/groups/{group_id}/")
-    
+        await self._request("DELETE", f"/api/v2/groups/{group_id}/")
+
     async def list_inventory_hosts(
         self, inventory_id: int, page: int = 1, page_size: int = 25
     ) -> list[dict[str, Any]]:
         """List hosts in inventory."""
         params = {"page": page, "page_size": page_size}
-        data = await self._request("GET", f"/api/v2/inventories/{inventory_id}/hosts/", params=params)
+        data = await self._request(
+            "GET", f"/api/v2/inventories/{inventory_id}/hosts/", params=params
+        )
         return data.get("results", [])
-    
+
     async def create_inventory_host(
-        self, inventory_id: int, name: str, description: str = "", variables: Optional[dict] = None
+        self,
+        inventory_id: int,
+        name: str,
+        description: str = "",
+        variables: Optional[dict] = None,
     ) -> dict[str, Any]:
         """Create host in inventory."""
         payload = {"name": name, "description": description}
         if variables:
             payload["variables"] = json.dumps(variables)
-        
-        return await self._request("POST", f"/api/v2/inventories/{inventory_id}/hosts/", json=payload)
-    
+
+        return await self._request(
+            "POST", f"/api/v2/inventories/{inventory_id}/hosts/", json=payload
+        )
+
     async def delete_inventory_host(self, host_id: int) -> None:
         """Delete inventory host."""
-        await self.client.request("DELETE", f"/api/v2/hosts/{host_id}/")
+        await self._request("DELETE", f"/api/v2/hosts/{host_id}/")
 
     async def launch_job(
         self,
@@ -545,7 +787,7 @@ class RestAWXClient(AWXClient):
     ) -> Job:
         """Launch job from template."""
         payload: dict[str, Any] = {}
-        
+
         if extra_vars:
             payload["extra_vars"] = extra_vars
         if limit:
@@ -554,11 +796,11 @@ class RestAWXClient(AWXClient):
             payload["job_tags"] = ",".join(tags)
         if skip_tags:
             payload["skip_tags"] = ",".join(skip_tags)
-        
+
         data = await self._request(
             "POST", f"/api/v2/job_templates/{template_id}/launch/", json=payload
         )
-        
+
         return self._parse_job(data)
 
     async def get_job(self, job_id: int) -> Job:
@@ -582,64 +824,75 @@ class RestAWXClient(AWXClient):
             params["created__gt"] = created_after
         if job_template_id:
             params["job_template"] = job_template_id
-        
+
         data = await self._request("GET", "/api/v2/jobs/", params=params)
-        
+
         return [self._parse_job(item) for item in data.get("results", [])]
 
     async def cancel_job(self, job_id: int) -> dict[str, Any]:
         """Cancel running job."""
         return await self._request("POST", f"/api/v2/jobs/{job_id}/cancel/")
-    
+
     async def delete_job(self, job_id: int) -> None:
         """Delete job."""
-        await self.client.request("DELETE", f"/api/v2/jobs/{job_id}/")
+        await self._request("DELETE", f"/api/v2/jobs/{job_id}/")
 
     async def get_job_stdout(
         self, job_id: int, format: str = "txt", tail_lines: Optional[int] = None
     ) -> str:
         """Get job stdout with fallback to job events.
-        
+
         Per AWX API docs: GET /api/v2/jobs/{id}/stdout/
         Format options: api, html, txt, ansi, json, txt_download, ansi_download
         """
         import json
         from awx_mcp_server.utils import get_logger
+
         logger = get_logger(__name__)
-        
+
         params = {"format": format}
         endpoint = f"/api/v2/jobs/{job_id}/stdout/"
-        
+
         try:
             # Make direct HTTP request without retry logic to get clear errors
             response = await self.client.request("GET", endpoint, params=params)
-            
+
             # Read response body ONCE as text (never call .json() directly on response)
             response_text = response.text
             content_type = response.headers.get("content-type", "").lower()
             status_code = response.status_code
-            
-            logger.debug(f"Job {job_id} stdout response: status={status_code}, content-type={content_type}, body_length={len(response_text)}")
-            
+
+            logger.debug(
+                f"Job {job_id} stdout response: status={status_code}, content-type={content_type}, body_length={len(response_text)}"
+            )
+
             if status_code == 404:
                 # Stdout endpoint not available, try fallback to job events
-                logger.info(f"Job {job_id} stdout endpoint returned 404, trying job events fallback")
+                logger.info(
+                    f"Job {job_id} stdout endpoint returned 404, trying job events fallback"
+                )
                 try:
-                    events = await self.get_job_events(job_id, failed_only=False, page=1, page_size=1000)
+                    events = await self.get_job_events(
+                        job_id, failed_only=False, page=1, page_size=1000
+                    )
                     output_lines = []
                     for event in events:
                         if event.stdout:
                             output_lines.append(event.stdout)
                     content = "\n".join(output_lines)
                     if not content:
-                        raise AWXClientError(f"Job {job_id} has no output available (no stdout or job events)")
+                        raise AWXClientError(
+                            f"Job {job_id} has no output available (no stdout or job events)"
+                        )
                     return content
                 except Exception as fallback_error:
                     raise AWXClientError(
                         f"Job {job_id} stdout endpoint unavailable (404) and job events fallback failed: {fallback_error}"
                     )
             elif status_code == 403:
-                raise AWXAuthenticationError(f"Permission denied to access job {job_id} stdout")
+                raise AWXAuthenticationError(
+                    f"Permission denied to access job {job_id} stdout"
+                )
             elif status_code >= 400:
                 # Try to parse error message from response
                 error_detail = response_text
@@ -649,11 +902,13 @@ class RestAWXClient(AWXClient):
                 except Exception:
                     # Not JSON, use raw text
                     pass
-                raise AWXClientError(f"Failed to get job {job_id} stdout (HTTP {status_code}): {error_detail}")
-            
+                raise AWXClientError(
+                    f"Failed to get job {job_id} stdout (HTTP {status_code}): {error_detail}"
+                )
+
             # Success response (2xx) - parse the body
             content = ""
-            
+
             # Try to parse as JSON if Content-Type indicates JSON
             if "application/json" in content_type:
                 try:
@@ -664,21 +919,25 @@ class RestAWXClient(AWXClient):
                         content = str(data)
                     logger.debug(f"Successfully parsed JSON response for job {job_id}")
                 except json.JSONDecodeError as e:
-                    logger.warning(f"Failed to parse JSON response for job {job_id} despite Content-Type={content_type}: {e}")
+                    logger.warning(
+                        f"Failed to parse JSON response for job {job_id} despite Content-Type={content_type}: {e}"
+                    )
                     logger.debug(f"Response body preview: {response_text[:200]}")
                     # Fall back to plain text
                     content = response_text
             else:
                 # Plain text response (text/plain, text/html, or other)
                 content = response_text
-                logger.debug(f"Using plain text response for job {job_id} (length: {len(content)})")
-            
+                logger.debug(
+                    f"Using plain text response for job {job_id} (length: {len(content)})"
+                )
+
             if tail_lines and content:
                 lines = content.split("\n")
                 content = "\n".join(lines[-tail_lines:])
-            
+
             return content
-            
+
         except httpx.HTTPError as e:
             logger.error(f"HTTP error fetching job {job_id} stdout: {e}")
             raise AWXConnectionError(f"Network error fetching job {job_id} output: {e}")
@@ -687,19 +946,26 @@ class RestAWXClient(AWXClient):
         except Exception as e:
             logger.error(f"Unexpected error fetching job {job_id} stdout: {e}")
             import traceback
+
             logger.error(f"Traceback: {traceback.format_exc()}")
             raise AWXClientError(f"Unexpected error fetching job {job_id} output: {e}")
 
     async def get_job_events(
-        self, job_id: int, failed_only: bool = False, page: int = 1, page_size: int = 100
+        self,
+        job_id: int,
+        failed_only: bool = False,
+        page: int = 1,
+        page_size: int = 100,
     ) -> list[JobEvent]:
         """Get job events."""
         params = {"page": page, "page_size": page_size, "order_by": "counter"}
         if failed_only:
             params["failed"] = "true"
-        
-        data = await self._request("GET", f"/api/v2/jobs/{job_id}/job_events/", params=params)
-        
+
+        data = await self._request(
+            "GET", f"/api/v2/jobs/{job_id}/job_events/", params=params
+        )
+
         return [
             JobEvent(
                 id=item["id"],
@@ -722,28 +988,31 @@ class RestAWXClient(AWXClient):
         """Parse job from API response."""
         started = None
         finished = None
-        
+
         if data.get("started"):
             try:
                 started = datetime.fromisoformat(data["started"].replace("Z", "+00:00"))
             except Exception:
                 pass
-        
+
         if data.get("finished"):
             try:
-                finished = datetime.fromisoformat(data["finished"].replace("Z", "+00:00"))
+                finished = datetime.fromisoformat(
+                    data["finished"].replace("Z", "+00:00")
+                )
             except Exception:
                 pass
-        
+
         # Parse extra_vars - handle both dict and string formats
         extra_vars = data.get("extra_vars", {})
         if isinstance(extra_vars, str):
             try:
                 import json
+
                 extra_vars = json.loads(extra_vars) if extra_vars else {}
             except (json.JSONDecodeError, ValueError):
                 extra_vars = {}
-        
+
         return Job(
             id=data["id"],
             name=data["name"],
@@ -758,3 +1027,205 @@ class RestAWXClient(AWXClient):
             elapsed=data.get("elapsed"),
             artifacts=data.get("artifacts", {}),
         )
+
+    # ── Workflow Job Templates ──
+
+    def _parse_datetime(self, value: Any) -> Optional[datetime]:
+        """Parse datetime string from API response."""
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    def _parse_workflow_job_template(self, data: dict[str, Any]) -> WorkflowJobTemplate:
+        """Parse workflow job template from API response."""
+        return WorkflowJobTemplate(
+            id=data["id"],
+            name=data["name"],
+            description=data.get("description"),
+            organization=data.get("organization"),
+            inventory=data.get("inventory"),
+            limit=data.get("limit"),
+            extra_vars=self._parse_extra_vars(data.get("extra_vars", {})),
+            survey_enabled=data.get("survey_enabled", False),
+            allow_simultaneous=data.get("allow_simultaneous", False),
+            ask_variables_on_launch=data.get("ask_variables_on_launch", False),
+            ask_inventory_on_launch=data.get("ask_inventory_on_launch", False),
+            ask_limit_on_launch=data.get("ask_limit_on_launch", False),
+            ask_tags_on_launch=data.get("ask_tags_on_launch", False),
+            ask_skip_tags_on_launch=data.get("ask_skip_tags_on_launch", False),
+            status=data.get("status"),
+            last_job_run=self._parse_datetime(data.get("last_job_run")),
+            next_job_run=self._parse_datetime(data.get("next_job_run")),
+        )
+
+    def _parse_workflow_job(self, data: dict[str, Any]) -> WorkflowJob:
+        """Parse workflow job from API response."""
+        return WorkflowJob(
+            id=data["id"],
+            name=data["name"],
+            description=data.get("description"),
+            status=JobStatus(data["status"]),
+            workflow_job_template=data.get("workflow_job_template"),
+            inventory=data.get("inventory"),
+            limit=data.get("limit"),
+            extra_vars=self._parse_extra_vars(data.get("extra_vars", {})),
+            started=self._parse_datetime(data.get("started")),
+            finished=self._parse_datetime(data.get("finished")),
+            elapsed=data.get("elapsed"),
+            failed=data.get("failed", False),
+            launch_type=data.get("launch_type"),
+            job_explanation=data.get("job_explanation"),
+        )
+
+    def _parse_workflow_job_node(self, data: dict[str, Any]) -> WorkflowJobNode:
+        """Parse workflow job node from API response."""
+        return WorkflowJobNode(
+            id=data["id"],
+            job=data.get("job"),
+            workflow_job=data["workflow_job"],
+            unified_job_template=data.get("unified_job_template"),
+            identifier=data.get("identifier"),
+            do_not_run=data.get("do_not_run", False),
+            success_nodes=data.get("success_nodes", []),
+            failure_nodes=data.get("failure_nodes", []),
+            always_nodes=data.get("always_nodes", []),
+            all_parents_must_converge=data.get("all_parents_must_converge", False),
+            summary_fields=data.get("summary_fields", {}),
+        )
+
+    async def list_workflow_job_templates(
+        self, name_filter: Optional[str] = None, page: int = 1, page_size: int = 25
+    ) -> list[WorkflowJobTemplate]:
+        """List workflow job templates."""
+        params = {"page": page, "page_size": page_size}
+        if name_filter:
+            params["name__icontains"] = name_filter
+
+        data = await self._request(
+            "GET", "/api/v2/workflow_job_templates/", params=params
+        )
+        return [
+            self._parse_workflow_job_template(item) for item in data.get("results", [])
+        ]
+
+    async def get_workflow_job_template(self, template_id: int) -> WorkflowJobTemplate:
+        """Get workflow job template by ID."""
+        data = await self._request(
+            "GET", f"/api/v2/workflow_job_templates/{template_id}/"
+        )
+        return self._parse_workflow_job_template(data)
+
+    async def launch_workflow_job(
+        self,
+        template_id: int,
+        extra_vars: Optional[dict[str, Any]] = None,
+        limit: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+        skip_tags: Optional[list[str]] = None,
+    ) -> WorkflowJob:
+        """Launch workflow job from template."""
+        payload: dict[str, Any] = {}
+
+        if extra_vars:
+            payload["extra_vars"] = extra_vars
+        if limit:
+            payload["limit"] = limit
+        if tags:
+            payload["job_tags"] = ",".join(tags)
+        if skip_tags:
+            payload["skip_tags"] = ",".join(skip_tags)
+
+        data = await self._request(
+            "POST",
+            f"/api/v2/workflow_job_templates/{template_id}/launch/",
+            json=payload,
+        )
+        return self._parse_workflow_job(data)
+
+    async def get_workflow_job(self, job_id: int) -> WorkflowJob:
+        """Get workflow job by ID."""
+        data = await self._request("GET", f"/api/v2/workflow_jobs/{job_id}/")
+        return self._parse_workflow_job(data)
+
+    async def list_workflow_jobs(
+        self,
+        status: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 25,
+        workflow_template_id: Optional[int] = None,
+    ) -> list[WorkflowJob]:
+        """List workflow jobs."""
+        params = {"page": page, "page_size": page_size, "order_by": "-id"}
+        if status:
+            params["status"] = status
+        if workflow_template_id:
+            params["workflow_job_template"] = workflow_template_id
+
+        data = await self._request("GET", "/api/v2/workflow_jobs/", params=params)
+        return [self._parse_workflow_job(item) for item in data.get("results", [])]
+
+    async def cancel_workflow_job(self, job_id: int) -> dict[str, Any]:
+        """Cancel running workflow job."""
+        return await self._request("POST", f"/api/v2/workflow_jobs/{job_id}/cancel/")
+
+    async def delete_workflow_job(self, job_id: int) -> None:
+        """Delete workflow job."""
+        await self._request("DELETE", f"/api/v2/workflow_jobs/{job_id}/")
+
+    async def relaunch_workflow_job(self, job_id: int) -> WorkflowJob:
+        """Relaunch a workflow job."""
+        data = await self._request("POST", f"/api/v2/workflow_jobs/{job_id}/relaunch/")
+        return self._parse_workflow_job(data)
+
+    async def get_workflow_job_template_nodes(
+        self, template_id: int, page: int = 1, page_size: int = 100
+    ) -> list[dict[str, Any]]:
+        """Get workflow job template node definitions (the template graph)."""
+        params = {"page": page, "page_size": page_size}
+        data = await self._request(
+            "GET",
+            f"/api/v2/workflow_job_templates/{template_id}/workflow_nodes/",
+            params=params,
+        )
+        return data.get("results", [])
+
+    async def get_workflow_job_template_survey(
+        self, template_id: int
+    ) -> dict[str, Any]:
+        """Get workflow job template survey spec."""
+        return await self._request(
+            "GET", f"/api/v2/workflow_job_templates/{template_id}/survey_spec/"
+        )
+
+    async def list_workflow_job_template_schedules(
+        self, template_id: int, page: int = 1, page_size: int = 25
+    ) -> list[dict[str, Any]]:
+        """List schedules for a workflow job template."""
+        params = {"page": page, "page_size": page_size}
+        data = await self._request(
+            "GET",
+            f"/api/v2/workflow_job_templates/{template_id}/schedules/",
+            params=params,
+        )
+        return data.get("results", [])
+
+    async def get_workflow_job_template_launch_config(
+        self, template_id: int
+    ) -> dict[str, Any]:
+        """Get workflow job template launch configuration (what can be prompted)."""
+        return await self._request(
+            "GET", f"/api/v2/workflow_job_templates/{template_id}/launch/"
+        )
+
+    async def get_workflow_job_nodes(
+        self, job_id: int, page: int = 1, page_size: int = 100
+    ) -> list[WorkflowJobNode]:
+        """Get workflow job nodes."""
+        params = {"page": page, "page_size": page_size}
+        data = await self._request(
+            "GET", f"/api/v2/workflow_jobs/{job_id}/workflow_nodes/", params=params
+        )
+        return [self._parse_workflow_job_node(item) for item in data.get("results", [])]

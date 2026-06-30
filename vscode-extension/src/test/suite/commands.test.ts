@@ -2,6 +2,8 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 
 suite('Commands Test Suite', () => {
+    // Must match the commands registered in extension source + package.json
+    // contributes.commands.
     const requiredCommands = [
         'awx-mcp.start',
         'awx-mcp.stop',
@@ -9,16 +11,16 @@ suite('Commands Test Suite', () => {
         'awx-mcp.status',
         'awx-mcp.configureCopilot',
         'awx-mcp.setupDependencies',
-        'awx-mcp.addEnvironment',
-        'awx-mcp.editEnvironment',
-        'awx-mcp.deleteEnvironment',
-        'awx-mcp.connectEnvironment',
+        'awx-mcp.addInstance',
+        'awx-mcp.editInstance',
+        'awx-mcp.removeInstance',
         'awx-mcp.testConnection',
-        'awx-mcp.setActiveEnvironment',
-        'awx-mcp.listEnvironments',
-        'awx-mcp.refreshMetrics',
+        'awx-mcp.testAuthentication',
+        'awx-mcp.setDefaultInstance',
+        'awx-mcp.listJobTemplates',
+        'awx-mcp.refreshInstances',
         'awx-mcp.viewLogs',
-        'awx-mcp.clearLogs'
+        'awx-mcp.viewMetrics'
     ];
 
     test('All required commands should be registered', async () => {
@@ -38,7 +40,7 @@ suite('Commands Test Suite', () => {
         // Test safe commands that should not have side effects
         const safeCommands = [
             'awx-mcp.status',
-            'awx-mcp.listEnvironments',
+            'awx-mcp.viewMetrics',
             'awx-mcp.viewLogs'
         ];
         

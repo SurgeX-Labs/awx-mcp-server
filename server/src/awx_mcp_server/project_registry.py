@@ -87,7 +87,13 @@ def register_project(
 
     # Auto-detect inventory
     if not inventory:
-        for inv_name in ["inventory", "inventory.yml", "inventory.ini", "hosts", "hosts.yml"]:
+        for inv_name in [
+            "inventory",
+            "inventory.yml",
+            "inventory.ini",
+            "hosts",
+            "hosts.yml",
+        ]:
             if (project_path / inv_name).exists():
                 inventory = inv_name
                 break
@@ -161,16 +167,21 @@ def list_projects() -> dict[str, Any]:
         project_path = Path(info["path"])
         info_copy = dict(info)
         info_copy["exists"] = project_path.is_dir()
-        info_copy["is_default"] = (name == registry["default"])
+        info_copy["is_default"] = name == registry["default"]
 
         # Count playbooks
         if project_path.is_dir():
-            yml_files = list(project_path.glob("*.yml")) + list(project_path.glob("*.yaml"))
-            info_copy["playbook_count"] = len([
-                f for f in yml_files
-                if not f.name.startswith(".")
-                and f.name not in ("requirements.yml", "galaxy.yml", "meta.yml")
-            ])
+            yml_files = list(project_path.glob("*.yml")) + list(
+                project_path.glob("*.yaml")
+            )
+            info_copy["playbook_count"] = len(
+                [
+                    f
+                    for f in yml_files
+                    if not f.name.startswith(".")
+                    and f.name not in ("requirements.yml", "galaxy.yml", "meta.yml")
+                ]
+            )
         else:
             info_copy["playbook_count"] = 0
 
@@ -200,7 +211,9 @@ def get_project(name: Optional[str] = None) -> dict[str, Any]:
     if not name or name not in registry["projects"]:
         return {
             "status": "error",
-            "message": f"Project '{name}' not found" if name else "No default project set",
+            "message": (
+                f"Project '{name}' not found" if name else "No default project set"
+            ),
         }
 
     return {"status": "found", "project": registry["projects"][name]}
@@ -239,10 +252,22 @@ def discover_playbooks(
 
     playbooks = []
     skip_names = {
-        "requirements.yml", "galaxy.yml", "meta.yml",
-        "requirements.yaml", "galaxy.yaml", "meta.yaml",
+        "requirements.yml",
+        "galaxy.yml",
+        "meta.yml",
+        "requirements.yaml",
+        "galaxy.yaml",
+        "meta.yaml",
     }
-    skip_dirs = {"roles", ".git", "collections", "venv", ".venv", "__pycache__", "node_modules"}
+    skip_dirs = {
+        "roles",
+        ".git",
+        "collections",
+        "venv",
+        ".venv",
+        "__pycache__",
+        "node_modules",
+    }
 
     for yml_file in sorted(root.rglob("*.yml")) + sorted(root.rglob("*.yaml")):
         # Skip files in certain directories
@@ -261,13 +286,15 @@ def discover_playbooks(
                     rel_path = yml_file.relative_to(root)
                     plays = len(content)
                     hosts = content[0].get("hosts", "N/A")
-                    playbooks.append({
-                        "name": yml_file.name,
-                        "relative_path": str(rel_path),
-                        "full_path": str(yml_file),
-                        "plays": plays,
-                        "hosts": str(hosts),
-                    })
+                    playbooks.append(
+                        {
+                            "name": yml_file.name,
+                            "relative_path": str(rel_path),
+                            "full_path": str(yml_file),
+                            "plays": plays,
+                            "hosts": str(hosts),
+                        }
+                    )
         except Exception:
             continue
 
@@ -396,7 +423,8 @@ async def git_push_project(
 
     async def _run_git(*args: str) -> tuple[int, str, str]:
         proc = await asyncio.create_subprocess_exec(
-            "git", *args,
+            "git",
+            *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(project_path),

@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import subprocess
 from typing import Any, Optional
 
 from awx_mcp_server.clients.base import AWXClient
@@ -15,6 +14,9 @@ from awx_mcp_server.domain import (
     JobStatus,
     JobTemplate,
     Project,
+    WorkflowJob,
+    WorkflowJobNode,
+    WorkflowJobTemplate,
 )
 
 
@@ -52,10 +54,10 @@ class AwxkitClient(AWXClient):
         Args:
             args: CLI arguments
             timeout: Command timeout in seconds
-        
+
         Returns:
             Parsed JSON response
-        
+
         Raises:
             AWXClientError: If command fails
         """
@@ -64,16 +66,16 @@ class AwxkitClient(AWXClient):
             "TOWER_HOST": self.base_url,
             "TOWER_VERIFY_SSL": "true" if self.config.verify_ssl else "false",
         }
-        
+
         if self.is_token:
             env["TOWER_OAUTH_TOKEN"] = self.secret
         else:
             env["TOWER_USERNAME"] = self.username or ""
             env["TOWER_PASSWORD"] = self.secret
-        
+
         # Build command
         cmd = ["awx", "-f", "json"] + args
-        
+
         try:
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -81,26 +83,26 @@ class AwxkitClient(AWXClient):
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
             )
-            
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
-            
+
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(), timeout=timeout
+            )
+
             if process.returncode != 0:
                 error_msg = stderr.decode("utf-8", errors="replace").strip()
                 raise AWXClientError(f"awxkit command failed: {error_msg}")
-            
+
             output = stdout.decode("utf-8", errors="replace").strip()
             if not output:
                 return {}
-            
+
             return json.loads(output)
         except asyncio.TimeoutError:
             raise AWXClientError(f"awxkit command timeout after {timeout}s")
         except json.JSONDecodeError as e:
             raise AWXClientError(f"Failed to parse awxkit output: {e}")
         except FileNotFoundError:
-            raise AWXClientError(
-                "awxkit not found. Please install: pip install awxkit"
-            )
+            raise AWXClientError("awxkit not found. Please install: pip install awxkit")
         except Exception as e:
             raise AWXClientError(f"awxkit command failed: {e}")
 
@@ -116,14 +118,21 @@ class AwxkitClient(AWXClient):
         self, name_filter: Optional[str] = None, page: int = 1, page_size: int = 25
     ) -> list[JobTemplate]:
         """List job templates."""
-        args = ["job_templates", "list", "--page", str(page), "--page-size", str(page_size)]
-        
+        args = [
+            "job_templates",
+            "list",
+            "--page",
+            str(page),
+            "--page-size",
+            str(page_size),
+        ]
+
         if name_filter:
             args.extend(["--name", name_filter])
-        
+
         data = await self._run_cli(args)
         results = data.get("results", []) if isinstance(data, dict) else data
-        
+
         return [
             JobTemplate(
                 id=item["id"],
@@ -141,7 +150,7 @@ class AwxkitClient(AWXClient):
     async def get_job_template(self, template_id: int) -> JobTemplate:
         """Get job template by ID."""
         data = await self._run_cli(["job_templates", "get", str(template_id)])
-        
+
         return JobTemplate(
             id=data["id"],
             name=data["name"],
@@ -158,13 +167,13 @@ class AwxkitClient(AWXClient):
     ) -> list[Project]:
         """List projects."""
         args = ["projects", "list", "--page", str(page), "--page-size", str(page_size)]
-        
+
         if name_filter:
             args.extend(["--name", name_filter])
-        
+
         data = await self._run_cli(args)
         results = data.get("results", []) if isinstance(data, dict) else data
-        
+
         return [
             Project(
                 id=item["id"],
@@ -181,7 +190,7 @@ class AwxkitClient(AWXClient):
     async def get_project(self, project_id: int) -> Project:
         """Get project by ID."""
         data = await self._run_cli(["projects", "get", str(project_id)])
-        
+
         return Project(
             id=data["id"],
             name=data["name"],
@@ -192,12 +201,14 @@ class AwxkitClient(AWXClient):
             status=data.get("status"),
         )
 
-    async def update_project(self, project_id: int, wait: bool = True) -> dict[str, Any]:
+    async def update_project(
+        self, project_id: int, wait: bool = True
+    ) -> dict[str, Any]:
         """Update project from SCM."""
         args = ["projects", "update", str(project_id)]
         if wait:
             args.append("--wait")
-        
+
         data = await self._run_cli(args, timeout=300 if wait else 30)
         return data if isinstance(data, dict) else {}
 
@@ -206,13 +217,13 @@ class AwxkitClient(AWXClient):
     ) -> list[Inventory]:
         """List inventories."""
         args = ["inventory", "list", "--page", str(page), "--page-size", str(page_size)]
-        
+
         if name_filter:
             args.extend(["--name", name_filter])
-        
+
         data = await self._run_cli(args)
         results = data.get("results", []) if isinstance(data, dict) else data
-        
+
         return [
             Inventory(
                 id=item["id"],
@@ -235,7 +246,7 @@ class AwxkitClient(AWXClient):
     ) -> Job:
         """Launch job from template."""
         args = ["job_templates", "launch", str(template_id)]
-        
+
         if extra_vars:
             args.extend(["--extra-vars", json.dumps(extra_vars)])
         if limit:
@@ -244,7 +255,7 @@ class AwxkitClient(AWXClient):
             args.extend(["--job-tags", ",".join(tags)])
         if skip_tags:
             args.extend(["--skip-tags", ",".join(skip_tags)])
-        
+
         data = await self._run_cli(args)
         return self._parse_job(data if isinstance(data, dict) else {})
 
@@ -262,13 +273,13 @@ class AwxkitClient(AWXClient):
     ) -> list[Job]:
         """List jobs."""
         args = ["jobs", "list", "--page", str(page), "--page-size", str(page_size)]
-        
+
         if status:
             args.extend(["--status", status])
-        
+
         data = await self._run_cli(args)
         results = data.get("results", []) if isinstance(data, dict) else data
-        
+
         return [self._parse_job(item) for item in results]
 
     async def cancel_job(self, job_id: int) -> dict[str, Any]:
@@ -283,30 +294,75 @@ class AwxkitClient(AWXClient):
         raise NotImplementedError("Use REST client for stdout retrieval")
 
     async def get_job_events(
-        self, job_id: int, failed_only: bool = False, page: int = 1, page_size: int = 100
+        self,
+        job_id: int,
+        failed_only: bool = False,
+        page: int = 1,
+        page_size: int = 100,
     ) -> list[JobEvent]:
         """Get job events - not well supported by awxkit CLI, use REST."""
         raise NotImplementedError("Use REST client for job events")
 
+    # Workflow methods - not supported by awxkit CLI, use REST
+    async def list_workflow_job_templates(
+        self, name_filter: Optional[str] = None, page: int = 1, page_size: int = 25
+    ) -> list[WorkflowJobTemplate]:
+        raise NotImplementedError("Use REST client for workflow job templates")
+
+    async def get_workflow_job_template(self, template_id: int) -> WorkflowJobTemplate:
+        raise NotImplementedError("Use REST client for workflow job templates")
+
+    async def launch_workflow_job(
+        self,
+        template_id: int,
+        extra_vars: Optional[dict[str, Any]] = None,
+        limit: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+        skip_tags: Optional[list[str]] = None,
+    ) -> WorkflowJob:
+        raise NotImplementedError("Use REST client for workflow jobs")
+
+    async def get_workflow_job(self, job_id: int) -> WorkflowJob:
+        raise NotImplementedError("Use REST client for workflow jobs")
+
+    async def list_workflow_jobs(
+        self,
+        status: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 25,
+        workflow_template_id: Optional[int] = None,
+    ) -> list[WorkflowJob]:
+        raise NotImplementedError("Use REST client for workflow jobs")
+
+    async def cancel_workflow_job(self, job_id: int) -> dict[str, Any]:
+        raise NotImplementedError("Use REST client for workflow jobs")
+
+    async def get_workflow_job_nodes(
+        self, job_id: int, page: int = 1, page_size: int = 100
+    ) -> list[WorkflowJobNode]:
+        raise NotImplementedError("Use REST client for workflow job nodes")
+
     def _parse_job(self, data: dict[str, Any]) -> Job:
         """Parse job from CLI output."""
         from datetime import datetime
-        
+
         started = None
         finished = None
-        
+
         if data.get("started"):
             try:
                 started = datetime.fromisoformat(data["started"].replace("Z", "+00:00"))
             except Exception:
                 pass
-        
+
         if data.get("finished"):
             try:
-                finished = datetime.fromisoformat(data["finished"].replace("Z", "+00:00"))
+                finished = datetime.fromisoformat(
+                    data["finished"].replace("Z", "+00:00")
+                )
             except Exception:
                 pass
-        
+
         return Job(
             id=data["id"],
             name=data["name"],

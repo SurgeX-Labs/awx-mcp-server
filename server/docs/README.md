@@ -100,7 +100,7 @@ This folder contains comprehensive documentation for the AWX MCP Server, organiz
 
 ### Usage Guides
 - **[../AWX_MCP_QUERY_REFERENCE.md](../AWX_MCP_QUERY_REFERENCE.md)** ⭐ **ESSENTIAL**
-  - Complete query reference for all 49 tools
+  - Complete query reference for all 76 tools
   - Natural language query examples
   - Workflow examples
 

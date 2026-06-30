@@ -94,6 +94,13 @@ export class MetricsProvider implements vscode.TreeDataProvider<MetricItem> {
                     'Failed or errored requests'
                 ),
                 new MetricItem(
+                    `$(graph) Success Rate`,
+                    this.requestStats.totalRequests > 0
+                        ? `${((this.requestStats.successfulRequests / this.requestStats.totalRequests) * 100).toFixed(2)}%`
+                        : 'N/A',
+                    'Percentage of successful requests'
+                ),
+                new MetricItem(
                     `${timeIcon} Avg Response Time`,
                     this.requestStats.averageResponseTime > 0 
                         ? `${Math.round(this.requestStats.averageResponseTime)}ms`

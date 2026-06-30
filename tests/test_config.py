@@ -4,8 +4,8 @@ import pytest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from awx_mcp.storage import ConfigManager
-from awx_mcp.domain import (
+from awx_mcp_server.storage import ConfigManager
+from awx_mcp_server.domain import (
     EnvironmentConfig,
     EnvironmentNotFoundError,
     EnvironmentAlreadyExistsError,
@@ -33,9 +33,9 @@ def test_add_environment(config_manager):
         name="test",
         base_url="https://awx.test.com",
     )
-    
+
     config_manager.add_environment(env)
-    
+
     retrieved = config_manager.get_environment("test")
     assert retrieved.name == "test"
     assert str(retrieved.base_url) == "https://awx.test.com/"
@@ -47,9 +47,9 @@ def test_add_duplicate_environment(config_manager):
         name="test",
         base_url="https://awx.test.com",
     )
-    
+
     config_manager.add_environment(env)
-    
+
     with pytest.raises(EnvironmentAlreadyExistsError):
         config_manager.add_environment(env)
 
@@ -64,10 +64,10 @@ def test_list_environments(config_manager):
     """Test listing environments."""
     env1 = EnvironmentConfig(name="env1", base_url="https://awx1.test.com")
     env2 = EnvironmentConfig(name="env2", base_url="https://awx2.test.com")
-    
+
     config_manager.add_environment(env1)
     config_manager.add_environment(env2)
-    
+
     envs = config_manager.list_environments()
     assert len(envs) == 2
     assert {e.name for e in envs} == {"env1", "env2"}
@@ -79,13 +79,13 @@ def test_active_environment(config_manager):
         name="test",
         base_url="https://awx.test.com",
     )
-    
+
     config_manager.add_environment(env)
-    
+
     # First environment is automatically active
     active = config_manager.get_active()
     assert active.name == "test"
-    
+
     # Add another and set it as active
     env2 = EnvironmentConfig(
         name="test2",
@@ -93,7 +93,7 @@ def test_active_environment(config_manager):
     )
     config_manager.add_environment(env2)
     config_manager.set_active("test2")
-    
+
     active = config_manager.get_active()
     assert active.name == "test2"
 
@@ -110,10 +110,10 @@ def test_delete_environment(config_manager):
         name="test",
         base_url="https://awx.test.com",
     )
-    
+
     config_manager.add_environment(env)
     config_manager.delete_environment("test")
-    
+
     with pytest.raises(EnvironmentNotFoundError):
         config_manager.get_environment("test")
 
@@ -125,12 +125,12 @@ def test_update_environment(config_manager):
         base_url="https://awx.test.com",
         verify_ssl=True,
     )
-    
+
     config_manager.add_environment(env)
-    
+
     # Update
     env.verify_ssl = False
     config_manager.update_environment("test", env)
-    
+
     updated = config_manager.get_environment("test")
     assert updated.verify_ssl is False

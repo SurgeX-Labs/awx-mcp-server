@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/manifest.schema.json",
   "manifest_version": "0.3",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "name": "awx-mcp-server",
   "display_name": "AWX MCP Server",
   "description": "Control AWX/Ansible Tower through the Model Context Protocol. Manage infrastructure automation with natural language.",
@@ -24,7 +24,10 @@
     "entry_point": "awx_mcp_server/__main__.py",
     "mcp_config": {
       "command": "python",
-      "args": ["-m", "awx_mcp_server"],
+      "args": [
+        "-m",
+        "awx_mcp_server"
+      ],
       "env": {
         "AWX_BASE_URL": "${user_config.awx_base_url}",
         "AWX_TOKEN": "${user_config.awx_token}",
@@ -81,76 +84,308 @@
   "capabilities": {
     "tools": [
       {
-        "name": "list_job_templates",
-        "description": "List all available job templates in AWX"
+        "name": "env_list",
+        "description": "List all configured AWX environments"
       },
       {
-        "name": "get_job_template",
-        "description": "Get details of a specific job template"
+        "name": "env_set_active",
+        "description": "Set the active AWX environment"
       },
       {
-        "name": "launch_job_template",
-        "description": "Launch a job from a template with optional parameters"
+        "name": "env_get_active",
+        "description": "Get the currently active AWX environment"
       },
       {
-        "name": "list_jobs",
-        "description": "List recent jobs with optional filters (status, limit)"
+        "name": "env_test_connection",
+        "description": "Test connection to an AWX environment"
       },
       {
-        "name": "get_job",
-        "description": "Get detailed information about a specific job"
+        "name": "awx_system_info",
+        "description": "Get AWX system information (config, dashboard, settings)"
       },
       {
-        "name": "get_job_output",
-        "description": "Get stdout/stderr output from a job"
+        "name": "awx_organizations_list",
+        "description": "List AWX organizations"
       },
       {
-        "name": "cancel_job",
-        "description": "Cancel a running job"
+        "name": "awx_organization_get",
+        "description": "Get AWX organization by ID"
       },
       {
-        "name": "list_inventories",
-        "description": "List all inventories in AWX"
+        "name": "awx_credentials_list",
+        "description": "List AWX credentials"
       },
       {
-        "name": "get_inventory",
-        "description": "Get details of a specific inventory"
+        "name": "awx_credential_types_list",
+        "description": "List AWX credential types"
       },
       {
-        "name": "list_inventory_hosts",
-        "description": "List hosts in an inventory"
+        "name": "awx_credential_create",
+        "description": "Create AWX credential"
       },
       {
-        "name": "list_projects",
-        "description": "List all projects in AWX"
+        "name": "awx_credential_delete",
+        "description": "Delete AWX credential"
       },
       {
-        "name": "get_project",
-        "description": "Get details of a specific project"
+        "name": "awx_notification_templates_list",
+        "description": "List AWX notification templates. Shows configured notifications (Slack, email, webhook, etc.) and their types."
       },
       {
-        "name": "update_project",
-        "description": "Sync/update a project from source control"
+        "name": "awx_notification_template_get",
+        "description": "Get details of a specific AWX notification template by ID, including its type, configuration, and custom messages."
       },
       {
-        "name": "list_workflow_templates",
-        "description": "List all workflow job templates"
+        "name": "awx_notification_template_create",
+        "description": "Create a new AWX notification template (Slack, email, webhook, etc.)."
       },
       {
-        "name": "launch_workflow",
-        "description": "Launch a workflow job template"
+        "name": "awx_notification_template_test",
+        "description": "Send a test notification from a notification template. Useful for verifying the template configuration (Slack channel, webhook URL, etc.) is working."
       },
       {
-        "name": "list_credentials",
-        "description": "List all credentials in AWX"
+        "name": "awx_notifications_list",
+        "description": "List sent notification history/delivery log. Shows notification status (pending, successful, failed), recipients, and errors. Can filter by notification template or status."
       },
       {
-        "name": "list_organizations",
-        "description": "List all organizations"
+        "name": "awx_notification_template_update",
+        "description": "Update an existing AWX notification template. Only provided fields are changed (partial update)."
       },
       {
-        "name": "get_system_health",
-        "description": "Get AWX system health and metrics"
+        "name": "awx_notification_template_delete",
+        "description": "Delete an AWX notification template."
+      },
+      {
+        "name": "awx_job_template_notifications_list",
+        "description": "List notification templates associated with a job template, showing which notifications fire on started, success, and error events."
+      },
+      {
+        "name": "awx_job_template_notification_associate",
+        "description": "Associate/attach a notification template to a job template for a specific event (started, success, or error)."
+      },
+      {
+        "name": "awx_job_template_notification_disassociate",
+        "description": "Disassociate/remove a notification template from a job template for a specific event (started, success, or error)."
+      },
+      {
+        "name": "awx_workflow_template_notifications_list",
+        "description": "List notification templates associated with a workflow job template, showing which notifications fire on started, success, and error events."
+      },
+      {
+        "name": "awx_workflow_template_notification_associate",
+        "description": "Associate/attach a notification template to a workflow job template for a specific event (started, success, or error)."
+      },
+      {
+        "name": "awx_workflow_template_notification_disassociate",
+        "description": "Disassociate/remove a notification template from a workflow job template for a specific event (started, success, or error)."
+      },
+      {
+        "name": "awx_templates_list",
+        "description": "List AWX job templates (NOT for recent jobs or job history). Templates are playbook definitions, configurations, settings. This shows available templates to run, not execution history or recent act..."
+      },
+      {
+        "name": "awx_template_create",
+        "description": "Create AWX job template"
+      },
+      {
+        "name": "awx_template_delete",
+        "description": "Delete AWX job template"
+      },
+      {
+        "name": "awx_projects_list",
+        "description": "List AWX projects"
+      },
+      {
+        "name": "awx_project_create",
+        "description": "Create AWX project"
+      },
+      {
+        "name": "awx_project_delete",
+        "description": "Delete AWX project"
+      },
+      {
+        "name": "awx_inventories_list",
+        "description": "List AWX inventories"
+      },
+      {
+        "name": "awx_inventory_create",
+        "description": "Create AWX inventory"
+      },
+      {
+        "name": "awx_inventory_delete",
+        "description": "Delete AWX inventory"
+      },
+      {
+        "name": "awx_inventory_groups_list",
+        "description": "List groups in AWX inventory"
+      },
+      {
+        "name": "awx_inventory_group_create",
+        "description": "Create group in AWX inventory"
+      },
+      {
+        "name": "awx_inventory_group_delete",
+        "description": "Delete group from AWX inventory"
+      },
+      {
+        "name": "awx_inventory_hosts_list",
+        "description": "List hosts in AWX inventory"
+      },
+      {
+        "name": "awx_inventory_host_create",
+        "description": "Create host in AWX inventory"
+      },
+      {
+        "name": "awx_inventory_host_delete",
+        "description": "Delete host from AWX inventory"
+      },
+      {
+        "name": "awx_project_update",
+        "description": "Update AWX project from SCM"
+      },
+      {
+        "name": "awx_job_launch",
+        "description": "Launch/execute/run/start a new AWX job from a template. Creates a new job execution instance."
+      },
+      {
+        "name": "awx_job_get",
+        "description": "Get specific AWX job metadata and summary details including status, timing, template info, and playbook name. Use this to check a single job's current state, whether it succeeded or failed, and its..."
+      },
+      {
+        "name": "awx_jobs_list",
+        "description": "Show/list/display/view recent AWX jobs, job execution history, completed jobs, running jobs, failed jobs, job status, job runs, playbook executions. Use this when user asks to 'show recent jobs', '..."
+      },
+      {
+        "name": "awx_job_cancel",
+        "description": "Cancel/stop/abort a currently running AWX job execution. Use this when user asks to 'cancel job', 'stop job', 'abort job', 'kill job', or any request to halt a running job."
+      },
+      {
+        "name": "awx_job_delete",
+        "description": "Delete/remove an AWX job record from history. Use this when user asks to 'delete job', 'remove job', 'clean up job', or any request to permanently remove a job record."
+      },
+      {
+        "name": "awx_job_stdout",
+        "description": "Show/display/view/get the console output, stdout, logs, or terminal output of an AWX job execution. Use this when user asks to 'show job output', 'view job logs', 'display console output', 'get job..."
+      },
+      {
+        "name": "awx_job_events",
+        "description": "Show/list/view/get detailed events, tasks, plays, and execution steps of an AWX job. Use this when user asks to 'show job events', 'view job tasks', 'list execution steps', 'see what tasks ran', 's..."
+      },
+      {
+        "name": "awx_job_failure_summary",
+        "description": "Analyze/diagnose/debug/troubleshoot why an AWX job failed and get actionable fix suggestions. Use this when user asks 'why did job fail', 'analyze failure', 'debug job error', 'show failure summary..."
+      },
+      {
+        "name": "awx_workflow_templates_list",
+        "description": "List AWX workflow job templates. Workflow templates define multi-step automation pipelines that chain multiple job templates together. Use this when user asks to 'list workflows', 'show workflow te..."
+      },
+      {
+        "name": "awx_workflow_template_get",
+        "description": "Get details of a specific AWX workflow job template by ID, including its configuration, launch options, schedule info, and status."
+      },
+      {
+        "name": "awx_workflow_job_launch",
+        "description": "Launch/execute/run a workflow job from a workflow job template. Creates a new workflow job that orchestrates multiple steps."
+      },
+      {
+        "name": "awx_workflow_job_get",
+        "description": "Get status and details of a specific AWX workflow job execution, including timing, launch type, and failure explanation."
+      },
+      {
+        "name": "awx_workflow_jobs_list",
+        "description": "List recent AWX workflow job executions and their statuses. Use this to see workflow run history."
+      },
+      {
+        "name": "awx_workflow_job_cancel",
+        "description": "Cancel/stop a running AWX workflow job execution."
+      },
+      {
+        "name": "awx_workflow_job_nodes",
+        "description": "Get the individual step/node details of an AWX workflow job execution. Shows each node's job template, status, elapsed time, and connection graph (success/failure/always paths). Use this to see whi..."
+      },
+      {
+        "name": "awx_workflow_job_delete",
+        "description": "Delete an AWX workflow job record from history."
+      },
+      {
+        "name": "awx_workflow_job_relaunch",
+        "description": "Relaunch/rerun a previous AWX workflow job execution. Creates a new workflow job from the same template with the same parameters."
+      },
+      {
+        "name": "awx_workflow_template_nodes",
+        "description": "Get the workflow job template node definitions â the graph of steps that make up the workflow template. Shows which job templates/projects/inventory sources are chained together and how (success/..."
+      },
+      {
+        "name": "awx_workflow_template_survey",
+        "description": "Get the survey spec for a workflow job template. Shows survey questions that are prompted when launching the workflow."
+      },
+      {
+        "name": "awx_workflow_template_schedules",
+        "description": "List schedules configured for a workflow job template. Shows when the workflow is set to run automatically."
+      },
+      {
+        "name": "awx_workflow_template_launch_config",
+        "description": "Get the launch configuration for a workflow job template. Shows which fields can be prompted on launch (inventory, limit, variables, etc.) and their defaults."
+      },
+      {
+        "name": "create_playbook",
+        "description": "Create/write/generate an Ansible playbook YAML file locally. Use this when user asks to 'create a playbook', 'write a playbook', 'generate a playbook', 'make a new playbook', or wants to author Ans..."
+      },
+      {
+        "name": "validate_playbook",
+        "description": "Validate/check/lint Ansible playbook syntax using ansible-playbook --syntax-check. Use this when user asks to 'validate playbook', 'check playbook syntax', 'lint playbook', 'verify playbook', or wa..."
+      },
+      {
+        "name": "ansible_playbook",
+        "description": "Execute/run an Ansible playbook locally for development and testing. Use this when user asks to 'run playbook locally', 'execute playbook', 'test playbook', 'dry-run playbook', or wants to run a pl..."
+      },
+      {
+        "name": "ansible_task",
+        "description": "Run an ad-hoc Ansible task/module locally. Use this when user asks to 'run ansible module', 'execute ad-hoc task', 'ping hosts', 'run shell command with ansible', 'test ansible module', or wants to..."
+      },
+      {
+        "name": "ansible_role",
+        "description": "Execute/run an Ansible role locally by generating a temporary playbook. Use this when user asks to 'run a role', 'execute role', 'test role locally', or wants to apply a specific role from their pr..."
+      },
+      {
+        "name": "create_role_structure",
+        "description": "Scaffold/generate/create an Ansible role directory structure with standard subdirectories (tasks, handlers, templates, files, vars, defaults, meta). Use this when user asks to 'create a role', 'sca..."
+      },
+      {
+        "name": "list_playbooks",
+        "description": "List/show/display all Ansible playbooks in the workspace or project directory. Use this when user asks to 'list playbooks', 'show my playbooks', 'what playbooks exist', 'find playbooks'."
+      },
+      {
+        "name": "list_roles",
+        "description": "List/show/display all Ansible roles in the workspace. Use this when user asks to 'list roles', 'show my roles', 'what roles exist'."
+      },
+      {
+        "name": "ansible_inventory",
+        "description": "List/show Ansible inventory hosts and groups using ansible-inventory. Use this when user asks to 'list inventory hosts', 'show inventory groups', 'display local inventory', 'what hosts are in my in..."
+      },
+      {
+        "name": "register_project",
+        "description": "Register/add a local Ansible project directory for easy reuse. Use this when user asks to 'register project', 'add project', 'set up project', 'configure my ansible project'. Auto-detects git remot..."
+      },
+      {
+        "name": "unregister_project",
+        "description": "Remove/unregister a local Ansible project from the registry. Use when user asks to 'remove project', 'unregister project', 'delete project registration'."
+      },
+      {
+        "name": "list_registered_projects",
+        "description": "List/show all registered local Ansible projects and the default. Use this when user asks to 'list my projects', 'show registered projects', 'what projects are configured'."
+      },
+      {
+        "name": "project_playbooks",
+        "description": "Discover/find/list playbooks and roles under a registered project root. Use this when user asks to 'show project playbooks', 'find playbooks in project', 'discover playbooks', 'what playbooks does..."
+      },
+      {
+        "name": "project_run_playbook",
+        "description": "Run a playbook using a registered project's inventory and environment. Use this when user asks to 'run project playbook', 'execute playbook from project', 'test project playbook locally'. Automatic..."
+      },
+      {
+        "name": "git_push_project",
+        "description": "Stage, commit, and push project changes to git remote (GitHub/GitLab). Use this when user asks to 'push to git', 'commit and push', 'push playbook changes', 'push project to github', 'publish chang..."
       }
     ]
   },

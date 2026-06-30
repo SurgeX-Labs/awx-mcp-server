@@ -339,32 +339,88 @@ async def handle_awx_command(message, say):
 
 ## 🔧 Available AWX Operations
 
-Both VS Code extension and web server support all 16 operations:
+Both the VS Code extension and the MCP server support all **76 tools** — **61 AWX operations** (below) plus **15 local Ansible development tools** (see [`server/README.md`](server/README.md)). The [Query Reference](AWX_MCP_QUERY_REFERENCE.md) has example prompts for every tool.
 
 ### Environment Management
-- `env_list` - List all configured AWX environments
-- `env_test` - Test connection to AWX environment
-- `env_get_active` - Get currently active environment
+- `env_list` - List configured AWX environments
+- `env_set_active` - Set the active AWX environment
+- `env_get_active` - Get the current active environment
+- `env_test_connection` - Test the AWX connection
+
+### System
+- `awx_system_info` - Get AWX config / dashboard / settings / current-user info
 
 ### Job Templates
-- `list_job_templates` - List all job templates (with filtering)
-- `get_job_template` - Get template details by name/ID
+- `awx_templates_list` - List job templates
+- `awx_template_create` - Create a job template
+- `awx_template_delete` - Delete a job template
 
-### Jobs
-- `list_jobs` - List all jobs (filter by status, date)
-- `get_job` - Get job details by ID
-- `job_launch` - Launch job from template
-- `job_cancel` - Cancel running job
-- `job_stdout` - Get job output/logs
-- `job_events` - Get job events (playbook tasks)
+### Jobs (Execution, Monitoring & Diagnostics)
+- `awx_job_launch` - Launch a job from a template
+- `awx_job_get` - Get job status/details
+- `awx_jobs_list` - List recent jobs / job history
+- `awx_job_cancel` - Cancel a running job
+- `awx_job_delete` - Delete a job record
+- `awx_job_stdout` - View job console output/logs
+- `awx_job_events` - View job events/tasks
+- `awx_job_failure_summary` - Analyze a job failure with fix suggestions
 
 ### Projects
-- `list_projects` - List all projects
-- `project_update` - Update project from SCM
+- `awx_projects_list` - List projects
+- `awx_project_create` - Create a project
+- `awx_project_delete` - Delete a project
+- `awx_project_update` - Update/sync a project from SCM
 
-### Inventories
-- `list_inventories` - List all inventories
-- `get_inventory` - Get inventory details
+### Inventories, Groups & Hosts
+- `awx_inventories_list` - List inventories
+- `awx_inventory_create` - Create an inventory
+- `awx_inventory_delete` - Delete an inventory
+- `awx_inventory_groups_list` - List groups in an inventory
+- `awx_inventory_group_create` - Create a group in an inventory
+- `awx_inventory_group_delete` - Delete a group
+- `awx_inventory_hosts_list` - List hosts in an inventory
+- `awx_inventory_host_create` - Create a host in an inventory
+- `awx_inventory_host_delete` - Delete a host
+
+### Organizations & Credentials
+- `awx_organizations_list` - List organizations
+- `awx_organization_get` - Get an organization by ID
+- `awx_credentials_list` - List credentials
+- `awx_credential_types_list` - List credential types
+- `awx_credential_create` - Create a credential
+- `awx_credential_delete` - Delete a credential
+
+### Workflow Job Templates
+- `awx_workflow_templates_list` - List workflow job templates
+- `awx_workflow_template_get` - Get workflow template details
+- `awx_workflow_template_nodes` - Get the workflow template node graph
+- `awx_workflow_template_survey` - Get workflow template survey spec
+- `awx_workflow_template_schedules` - List workflow template schedules
+- `awx_workflow_template_launch_config` - Get workflow template launch config
+
+### Workflow Jobs
+- `awx_workflow_job_launch` - Launch a workflow from a template
+- `awx_workflow_job_get` - Get workflow job status/details
+- `awx_workflow_jobs_list` - List recent workflow job runs
+- `awx_workflow_job_cancel` - Cancel a running workflow job
+- `awx_workflow_job_nodes` - Get per-node details of a workflow job
+- `awx_workflow_job_relaunch` - Relaunch a previous workflow job
+- `awx_workflow_job_delete` - Delete a workflow job record
+
+### Notifications
+- `awx_notification_templates_list` - List notification templates
+- `awx_notification_template_get` - Get a notification template
+- `awx_notification_template_create` - Create a notification template (Slack/email/webhook)
+- `awx_notification_template_update` - Update a notification template
+- `awx_notification_template_delete` - Delete a notification template
+- `awx_notification_template_test` - Send a test notification
+- `awx_notifications_list` - List sent notification history
+- `awx_job_template_notifications_list` - List a job template's notifications
+- `awx_job_template_notification_associate` - Attach a notification to a job template
+- `awx_job_template_notification_disassociate` - Remove a notification from a job template
+- `awx_workflow_template_notifications_list` - List a workflow template's notifications
+- `awx_workflow_template_notification_associate` - Attach a notification to a workflow template
+- `awx_workflow_template_notification_disassociate` - Remove a notification from a workflow template
 
 ---
 
@@ -414,7 +470,7 @@ awx-mcp-python/
 │  ┌───────────┐  │     stdio      ┌──────────────┐
 │  │  GitHub   │──┼────transport───▶│  MCP Server  │
 │  │  Copilot  │  │    (local)     │   (shared)   │
-│  │   Chat    │◀─┼────────────────│   16 Tools   │
+│  │   Chat    │◀─┼────────────────│   76 Tools   │
 │  └───────────┘  │                └──────────────┘
 │                 │                        │
 │  ┌───────────┐  │                        │

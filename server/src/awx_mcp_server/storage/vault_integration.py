@@ -26,6 +26,7 @@ from enum import Enum
 
 class VaultProvider(Enum):
     """Supported vault providers."""
+
     HASHICORP_VAULT = "hashicorp_vault"
     AWS_SECRETS_MANAGER = "aws_secrets_manager"
     AZURE_KEY_VAULT = "azure_key_vault"
@@ -39,6 +40,7 @@ class VaultProvider(Enum):
 @dataclass
 class AWXCredentials:
     """AWX credentials retrieved from vault."""
+
     awx_url: str
     awx_token: Optional[str] = None
     awx_username: Optional[str] = None
@@ -50,90 +52,83 @@ class AWXCredentials:
 class BaseVaultProvider(ABC):
     """
     Abstract base class for vault providers.
-    
+
     All vault integrations should inherit from this class and implement
     the required methods.
     """
-    
+
     def __init__(self, config: Dict[str, Any]):
         """
         Initialize vault provider.
-        
+
         Args:
             config: Provider-specific configuration
         """
         self.config = config
-    
+
     @abstractmethod
     async def get_credentials(
-        self,
-        user_id: str,
-        environment: str = "production"
+        self, user_id: str, environment: str = "production"
     ) -> AWXCredentials:
         """
         Retrieve AWX credentials from vault.
-        
+
         Args:
             user_id: User identifier (email, username, etc.)
             environment: AWX environment (development, staging, production)
-        
+
         Returns:
             AWXCredentials object with AWX connection details
-        
+
         Raises:
             VaultAuthenticationError: If authentication fails
             VaultAccessDeniedError: If user doesn't have access
             VaultCredentialsNotFoundError: If credentials not found
         """
         pass
-    
+
     @abstractmethod
     async def update_credentials(
-        self,
-        user_id: str,
-        credentials: AWXCredentials,
-        environment: str = "production"
+        self, user_id: str, credentials: AWXCredentials, environment: str = "production"
     ) -> bool:
         """
         Update AWX credentials in vault.
-        
+
         Args:
             user_id: User identifier
             credentials: New credentials
             environment: AWX environment
-        
+
         Returns:
             True if successful
-        
+
         Raises:
             VaultAuthenticationError: If authentication fails
             VaultAccessDeniedError: If user doesn't have write access
         """
         pass
-    
+
     @abstractmethod
     async def delete_credentials(
-        self,
-        user_id: str,
-        environment: str = "production"
+        self, user_id: str, environment: str = "production"
     ) -> bool:
         """
         Delete AWX credentials from vault.
-        
+
         Args:
             user_id: User identifier
             environment: AWX environment
-        
+
         Returns:
             True if successful
         """
         pass
-    
+
     @abstractmethod
     async def health_check(self) -> bool:
         """
         Check vault connectivity and authentication.
-        
+
         Returns:
             True if vault is accessible
         """
@@ -142,37 +137,41 @@ class BaseVaultProvider(ABC):
 
 class VaultAuthenticationError(Exception):
     """Raised when vault authentication fails."""
+
     pass
 
 
 class VaultAccessDeniedError(Exception):
     """Raised when user doesn't have access to credentials."""
+
     pass
 
 
 class VaultCredentialsNotFoundError(Exception):
     """Raised when credentials are not found in vault."""
+
     pass
 
 
 # Placeholder implementations - Will be implemented in future versions
 
+
 class HashiCorpVaultProvider(BaseVaultProvider):
     """
     HashiCorp Vault integration.
-    
+
     Supports:
     - Multiple auth methods (Kubernetes, AppRole, Token, LDAP)
     - KV v1 and v2 secret engines
     - Dynamic secrets
     - Secret caching with TTL
-    
+
     Configuration:
         address: Vault server URL
         auth_method: Authentication method
         secret_path: Path template for secrets
         namespace: Vault namespace (optional)
-    
+
     Example vault-config.yaml:
         hashicorp_vault:
           address: "https://vault.company.com:8200"
@@ -181,16 +180,22 @@ class HashiCorpVaultProvider(BaseVaultProvider):
             role: "awx-mcp-server"
           secret_path_template: "secret/awx/{environment}/{user_id}"
     """
-    
-    async def get_credentials(self, user_id: str, environment: str = "production") -> AWXCredentials:
+
+    async def get_credentials(
+        self, user_id: str, environment: str = "production"
+    ) -> AWXCredentials:
         raise NotImplementedError("HashiCorp Vault integration coming in v2.0.0")
-    
-    async def update_credentials(self, user_id: str, credentials: AWXCredentials, environment: str = "production") -> bool:
+
+    async def update_credentials(
+        self, user_id: str, credentials: AWXCredentials, environment: str = "production"
+    ) -> bool:
         raise NotImplementedError("HashiCorp Vault integration coming in v2.0.0")
-    
-    async def delete_credentials(self, user_id: str, environment: str = "production") -> bool:
+
+    async def delete_credentials(
+        self, user_id: str, environment: str = "production"
+    ) -> bool:
         raise NotImplementedError("HashiCorp Vault integration coming in v2.0.0")
-    
+
     async def health_check(self) -> bool:
         raise NotImplementedError("HashiCorp Vault integration coming in v2.0.0")
 
@@ -198,19 +203,25 @@ class HashiCorpVaultProvider(BaseVaultProvider):
 class AWSSecretsManagerProvider(BaseVaultProvider):
     """
     AWS Secrets Manager integration.
-    
+
     See: VAULT_INTEGRATION.md for configuration details
     """
-    
-    async def get_credentials(self, user_id: str, environment: str = "production") -> AWXCredentials:
+
+    async def get_credentials(
+        self, user_id: str, environment: str = "production"
+    ) -> AWXCredentials:
         raise NotImplementedError("AWS Secrets Manager integration coming in v2.0.0")
-    
-    async def update_credentials(self, user_id: str, credentials: AWXCredentials, environment: str = "production") -> bool:
+
+    async def update_credentials(
+        self, user_id: str, credentials: AWXCredentials, environment: str = "production"
+    ) -> bool:
         raise NotImplementedError("AWS Secrets Manager integration coming in v2.0.0")
-    
-    async def delete_credentials(self, user_id: str, environment: str = "production") -> bool:
+
+    async def delete_credentials(
+        self, user_id: str, environment: str = "production"
+    ) -> bool:
         raise NotImplementedError("AWS Secrets Manager integration coming in v2.0.0")
-    
+
     async def health_check(self) -> bool:
         raise NotImplementedError("AWS Secrets Manager integration coming in v2.0.0")
 
@@ -218,19 +229,25 @@ class AWSSecretsManagerProvider(BaseVaultProvider):
 class AzureKeyVaultProvider(BaseVaultProvider):
     """
     Azure Key Vault integration.
-    
+
     See: VAULT_INTEGRATION.md for configuration details
     """
-    
-    async def get_credentials(self, user_id: str, environment: str = "production") -> AWXCredentials:
+
+    async def get_credentials(
+        self, user_id: str, environment: str = "production"
+    ) -> AWXCredentials:
         raise NotImplementedError("Azure Key Vault integration coming in v2.0.0")
-    
-    async def update_credentials(self, user_id: str, credentials: AWXCredentials, environment: str = "production") -> bool:
+
+    async def update_credentials(
+        self, user_id: str, credentials: AWXCredentials, environment: str = "production"
+    ) -> bool:
         raise NotImplementedError("Azure Key Vault integration coming in v2.0.0")
-    
-    async def delete_credentials(self, user_id: str, environment: str = "production") -> bool:
+
+    async def delete_credentials(
+        self, user_id: str, environment: str = "production"
+    ) -> bool:
         raise NotImplementedError("Azure Key Vault integration coming in v2.0.0")
-    
+
     async def health_check(self) -> bool:
         raise NotImplementedError("Azure Key Vault integration coming in v2.0.0")
 
@@ -238,19 +255,25 @@ class AzureKeyVaultProvider(BaseVaultProvider):
 class GoogleSecretManagerProvider(BaseVaultProvider):
     """
     Google Secret Manager integration.
-    
+
     See: VAULT_INTEGRATION.md for configuration details
     """
-    
-    async def get_credentials(self, user_id: str, environment: str = "production") -> AWXCredentials:
+
+    async def get_credentials(
+        self, user_id: str, environment: str = "production"
+    ) -> AWXCredentials:
         raise NotImplementedError("Google Secret Manager integration coming in v2.0.0")
-    
-    async def update_credentials(self, user_id: str, credentials: AWXCredentials, environment: str = "production") -> bool:
+
+    async def update_credentials(
+        self, user_id: str, credentials: AWXCredentials, environment: str = "production"
+    ) -> bool:
         raise NotImplementedError("Google Secret Manager integration coming in v2.0.0")
-    
-    async def delete_credentials(self, user_id: str, environment: str = "production") -> bool:
+
+    async def delete_credentials(
+        self, user_id: str, environment: str = "production"
+    ) -> bool:
         raise NotImplementedError("Google Secret Manager integration coming in v2.0.0")
-    
+
     async def health_check(self) -> bool:
         raise NotImplementedError("Google Secret Manager integration coming in v2.0.0")
 
@@ -264,24 +287,26 @@ VAULT_PROVIDERS = {
 }
 
 
-def create_vault_provider(provider_type: VaultProvider, config: Dict[str, Any]) -> BaseVaultProvider:
+def create_vault_provider(
+    provider_type: VaultProvider, config: Dict[str, Any]
+) -> BaseVaultProvider:
     """
     Factory function to create vault provider instances.
-    
+
     Args:
         provider_type: Type of vault provider
         config: Provider-specific configuration
-    
+
     Returns:
         Vault provider instance
-    
+
     Raises:
         ValueError: If provider type is not supported
         NotImplementedError: If provider is not yet implemented
     """
     if provider_type not in VAULT_PROVIDERS:
         raise ValueError(f"Unsupported vault provider: {provider_type}")
-    
+
     provider_class = VAULT_PROVIDERS[provider_type]
     return provider_class(config)
 

@@ -59,8 +59,9 @@ suite('Views Test Suite', () => {
         );
         
         assert.ok(successRateItem, 'Should have Success Rate item');
-        // 2 successful out of 3 total = 66.67%
-        assert.ok(successRateItem.label?.toString().includes('66.67%'), 
+        // 2 successful out of 3 total = 66.67%. The value is shown in the
+        // item description (consistent with the other metric items).
+        assert.ok(successRateItem.description?.toString().includes('66.67%'),
             'Should show correct success rate');
     });
 

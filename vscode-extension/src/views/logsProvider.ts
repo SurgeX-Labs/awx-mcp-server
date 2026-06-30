@@ -115,11 +115,11 @@ class LogItem extends vscode.TreeItem {
                 this.iconPath = new vscode.ThemeIcon('info');
         }
         
-        // Set description (truncated message)
-        this.description = logEntry.message.substring(0, 60);
-        if (logEntry.message.length > 60) {
-            this.description += '...';
-        }
+        // The message is shown in the label; use the description for a compact
+        // view of any structured details.
+        this.description = logEntry.details
+            ? JSON.stringify(logEntry.details).substring(0, 60)
+            : '';
         
         // Set tooltip with full details
         this.tooltip = this.buildTooltip(logEntry);
@@ -142,7 +142,7 @@ class LogItem extends vscode.TreeItem {
             'response': '⬅️'
         };
         
-        return `${time} ${levelEmoji[entry.level] || ''}`;
+        return `${time} ${levelEmoji[entry.level] || ''} ${entry.message}`;
     }
     
     private buildTooltip(entry: LogEntry): string {

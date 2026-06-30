@@ -16,7 +16,9 @@ from awx_mcp_server.domain import (
 class ConfigManager:
     """Manage AWX environment configurations."""
 
-    def __init__(self, config_path: Optional[Path] = None, tenant_id: Optional[str] = None):
+    def __init__(
+        self, config_path: Optional[Path] = None, tenant_id: Optional[str] = None
+    ):
         """
         Initialize config manager.
 
@@ -31,11 +33,11 @@ class ConfigManager:
                 config_path = base_dir / tenant_id / "config.json"
             else:
                 config_path = base_dir / "config.json"
-        
+
         self.config_path = config_path
         self.tenant_id = tenant_id
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         self._environments: dict[str, EnvironmentConfig] = {}
         self._active_env: Optional[str] = None
         self._load()
@@ -46,19 +48,21 @@ class ConfigManager:
 
         Args:
             env: Environment configuration
-        
+
         Raises:
             EnvironmentAlreadyExistsError: If environment name already exists
         """
         if env.name in self._environments:
-            raise EnvironmentAlreadyExistsError(f"Environment '{env.name}' already exists")
-        
+            raise EnvironmentAlreadyExistsError(
+                f"Environment '{env.name}' already exists"
+            )
+
         self._environments[env.name] = env
-        
+
         # Set as default if first environment or explicitly marked
         if len(self._environments) == 1 or env.is_default:
             self.set_active(env.name)
-        
+
         self._save()
 
     def update_environment(self, name: str, env: EnvironmentConfig) -> None:
@@ -68,21 +72,23 @@ class ConfigManager:
         Args:
             name: Current environment name
             env: Updated environment configuration
-        
+
         Raises:
             EnvironmentNotFoundError: If environment doesn't exist
         """
         if name not in self._environments:
             raise EnvironmentNotFoundError(f"Environment '{name}' not found")
-        
+
         # Handle name change
         if name != env.name:
             if env.name in self._environments:
-                raise EnvironmentAlreadyExistsError(f"Environment '{env.name}' already exists")
+                raise EnvironmentAlreadyExistsError(
+                    f"Environment '{env.name}' already exists"
+                )
             del self._environments[name]
             if self._active_env == name:
                 self._active_env = env.name
-        
+
         self._environments[env.name] = env
         self._save()
 
@@ -92,22 +98,22 @@ class ConfigManager:
 
         Args:
             name: Environment name
-        
+
         Raises:
             EnvironmentNotFoundError: If environment doesn't exist
         """
         if name not in self._environments:
             raise EnvironmentNotFoundError(f"Environment '{name}' not found")
-        
+
         del self._environments[name]
-        
+
         # Clear active if this was active
         if self._active_env == name:
             self._active_env = None
             # Set first remaining as active
             if self._environments:
                 self._active_env = next(iter(self._environments.keys()))
-        
+
         self._save()
 
     def get_environment(self, name: str) -> EnvironmentConfig:
@@ -116,10 +122,10 @@ class ConfigManager:
 
         Args:
             name: Environment name
-        
+
         Returns:
             Environment configuration
-        
+
         Raises:
             EnvironmentNotFoundError: If environment doesn't exist
         """
@@ -133,10 +139,10 @@ class ConfigManager:
 
         Args:
             env_id: Environment UUID
-        
+
         Returns:
             Environment configuration
-        
+
         Raises:
             EnvironmentNotFoundError: If environment doesn't exist
         """
@@ -160,13 +166,13 @@ class ConfigManager:
 
         Args:
             name: Environment name
-        
+
         Raises:
             EnvironmentNotFoundError: If environment doesn't exist
         """
         if name not in self._environments:
             raise EnvironmentNotFoundError(f"Environment '{name}' not found")
-        
+
         self._active_env = name
         self._save()
 
@@ -176,7 +182,7 @@ class ConfigManager:
 
         Returns:
             Active environment configuration
-        
+
         Raises:
             NoActiveEnvironmentError: If no active environment
         """
@@ -197,13 +203,13 @@ class ConfigManager:
         """Load configuration from file."""
         if not self.config_path.exists():
             return
-        
+
         try:
             with open(self.config_path, "r") as f:
                 data = json.load(f)
-            
+
             self._active_env = data.get("active_environment")
-            
+
             for env_data in data.get("environments", []):
                 env = EnvironmentConfig.model_validate(env_data)
                 self._environments[env.name] = env
@@ -215,8 +221,10 @@ class ConfigManager:
         """Save configuration to file."""
         data = {
             "active_environment": self._active_env,
-            "environments": [env.model_dump(mode="json") for env in self._environments.values()],
+            "environments": [
+                env.model_dump(mode="json") for env in self._environments.values()
+            ],
         }
-        
+
         with open(self.config_path, "w") as f:
             json.dump(data, f, indent=2)

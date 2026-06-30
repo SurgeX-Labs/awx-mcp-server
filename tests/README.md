@@ -80,7 +80,7 @@ python tests/test_project_update.py 5 --wait
 pytest
 
 # Run with coverage
-pytest --cov=awx_mcp --cov-report=html
+pytest --cov=awx_mcp_server --cov-report=html
 
 # Run specific test file
 pytest tests/test_mcp_integration.py
@@ -100,13 +100,13 @@ pytest -v --log-cli-level=DEBUG
 1. **AWX Server** - Running and accessible
 2. **Environment Configured** - At least one environment set up
    ```bash
-   python -m awx_mcp.cli env add --name local --url http://localhost:30080 --token TOKEN
+   python -m awx_mcp_server.cli env add --name local --url http://localhost:30080 --token TOKEN
    ```
 
 3. **Credentials** - Stored in keyring
 4. **Active Environment** - Default environment set
    ```bash
-   python -m awx_mcp.cli env set-default local
+   python -m awx_mcp_server.cli env set-default local
    ```
 
 ## Test Output Examples
@@ -194,7 +194,7 @@ python tests/test_project_update.py 5 --wait
 ✗ No active environment set!
 
 # Fix:
-python -m awx_mcp.cli env set-default local
+python -m awx_mcp_server.cli env set-default local
 ```
 
 ### Connection Failed
@@ -230,8 +230,8 @@ Add to CI pipeline:
     AWX_URL: ${{ secrets.AWX_URL }}
     AWX_TOKEN: ${{ secrets.AWX_TOKEN }}
   run: |
-    python -m awx_mcp.cli env add --name ci --url $AWX_URL --token $AWX_TOKEN
-    pytest --cov=awx_mcp --cov-report=xml
+    python -m awx_mcp_server.cli env add --name ci --url $AWX_URL --token $AWX_TOKEN
+    pytest --cov=awx_mcp_server --cov-report=xml
 ```
 
 ## Writing New Tests
@@ -241,9 +241,9 @@ Follow the pattern from existing tests:
 ```python
 """Test AWX MCP functionality - description."""
 import asyncio
-from awx_mcp.storage import ConfigManager, CredentialStore
-from awx_mcp.clients import CompositeAWXClient
-from awx_mcp.domain import CredentialType
+from awx_mcp_server.storage import ConfigManager, CredentialStore
+from awx_mcp_server.clients import CompositeAWXClient
+from awx_mcp_server.domain import CredentialType
 
 async def test_your_feature():
     """Test description."""

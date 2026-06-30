@@ -83,7 +83,7 @@ server/
 ├── REMOTE_DEPLOYMENT.md            ← Deployment guide
 ├── REMOTE_CLIENT_SETUP.md          ← Client configuration
 ├── DEPLOYMENT_ARCHITECTURE.md      ← Architecture overview
-├── AWX_MCP_QUERY_REFERENCE.md      ← Query examples (49 tools)
+├── AWX_MCP_QUERY_REFERENCE.md      ← Query examples (76 tools)
 └── README.md                       ← Main README
 ```
 

@@ -15,7 +15,11 @@ from mcp.types import (
 from awx_mcp_server.clients import CompositeAWXClient
 from awx_mcp_server.domain import (
     AllowlistViolationError,
-    AuditLog,
+    AWXAuthenticationError,
+    AWXClientError,
+    AWXConnectionError,
+    AWXMCPError,
+    AWXPermissionError,
     CredentialType,
     EnvironmentConfig,
     NoActiveEnvironmentError,
@@ -32,65 +36,75 @@ logger = get_logger(__name__)
 def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
     """
     Create MCP server instance.
-    
+
     Args:
         tenant_id: Tenant ID for multi-tenant isolation (optional)
-    
+
     Returns:
         Configured MCP Server instance
     """
     # Create MCP server
     mcp_server = Server("awx-mcp-server")
-    
+
     # Initialize storage with tenant context
     config_manager = ConfigManager(tenant_id=tenant_id)
     credential_store = CredentialStore(tenant_id=tenant_id)
-
 
     def get_active_client() -> tuple[EnvironmentConfig, CompositeAWXClient]:
         """Get client for active environment, falling back to environment variables if no config exists."""
         try:
             # Try to get stored environment
             env = config_manager.get_active()
-            
+
             # Determine credential type
             try:
-                username, secret = credential_store.get_credential(env.env_id, CredentialType.PASSWORD)
+                username, secret = credential_store.get_credential(
+                    env.env_id, CredentialType.PASSWORD
+                )
                 is_token = False
             except Exception:
-                username, secret = credential_store.get_credential(env.env_id, CredentialType.TOKEN)
+                username, secret = credential_store.get_credential(
+                    env.env_id, CredentialType.TOKEN
+                )
                 is_token = True
-            
+
             client = CompositeAWXClient(env, username, secret, is_token)
             return env, client
-            
+
         except (NoActiveEnvironmentError, Exception) as e:
             # Fall back to environment variables
-            logger.info(f"No stored environment found, checking environment variables: {e}")
-            
+            logger.info(
+                f"No stored environment found, checking environment variables: {e}"
+            )
+
             awx_base_url = os.getenv("AWX_BASE_URL")
             awx_token = os.getenv("AWX_TOKEN")
             awx_username = os.getenv("AWX_USERNAME")
             awx_password = os.getenv("AWX_PASSWORD")
             awx_platform = os.getenv("AWX_PLATFORM", "awx").lower()  # Default to AWX
             awx_verify_ssl = os.getenv("AWX_VERIFY_SSL", "true").lower() == "true"
-            
+
             # Validate platform type
             from awx_mcp_server.domain import PlatformType
+
             try:
                 platform_type = PlatformType(awx_platform)
             except ValueError:
-                logger.warning(f"Invalid AWX_PLATFORM value '{awx_platform}', defaulting to 'awx'")
+                logger.warning(
+                    f"Invalid AWX_PLATFORM value '{awx_platform}', defaulting to 'awx'"
+                )
                 platform_type = PlatformType.AWX
-            
+
             # Debug logging
-            logger.info(f"Environment variables: AWX_BASE_URL={awx_base_url}, AWX_PLATFORM={platform_type.value}, AWX_TOKEN={'*' * 10 if awx_token else None}, AWX_USERNAME={awx_username}, AWX_VERIFY_SSL={awx_verify_ssl}")
-            
+            logger.info(
+                f"Environment variables: AWX_BASE_URL={awx_base_url}, AWX_PLATFORM={platform_type.value}, AWX_TOKEN={'*' * 10 if awx_token else None}, AWX_USERNAME={awx_username}, AWX_VERIFY_SSL={awx_verify_ssl}"
+            )
+
             if not awx_base_url:
                 raise NoActiveEnvironmentError(
                     "No active environment configured and AWX_BASE_URL environment variable not set"
                 )
-            
+
             # Create temporary environment from env vars
             temp_env = EnvironmentConfig(
                 env_id=uuid4(),
@@ -100,25 +114,30 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                 verify_ssl=awx_verify_ssl,
                 is_default=True,
                 allowed_job_templates=[],
-                allowed_inventories=[]
+                allowed_inventories=[],
             )
-            
+
             # Determine auth method
             if awx_token:
                 logger.info("Using AWX_TOKEN from environment variables")
                 client = CompositeAWXClient(temp_env, "", awx_token, is_token=True)
             elif awx_username and awx_password:
-                logger.info("Using AWX_USERNAME/AWX_PASSWORD from environment variables")
-                client = CompositeAWXClient(temp_env, awx_username, awx_password, is_token=False)
+                logger.info(
+                    "Using AWX_USERNAME/AWX_PASSWORD from environment variables"
+                )
+                client = CompositeAWXClient(
+                    temp_env, awx_username, awx_password, is_token=False
+                )
             else:
                 raise NoActiveEnvironmentError(
                     "No active environment configured and neither AWX_TOKEN nor AWX_USERNAME/AWX_PASSWORD set"
                 )
-            
+
             return temp_env, client
 
-
-    def check_allowlist(env: EnvironmentConfig, template_id: int, template_name: str) -> None:
+    def check_allowlist(
+        env: EnvironmentConfig, template_id: int, template_name: str
+    ) -> None:
         """Check if template is in allowlist."""
         if env.allowed_job_templates and template_name not in env.allowed_job_templates:
             raise AllowlistViolationError(
@@ -134,676 +153,1553 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
             # Environment Management
             Tool(
                 name="env_list",
-            description="List all configured AWX environments",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-            },
-        ),
-        Tool(
-            name="env_set_active",
-            description="Set the active AWX environment",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "env_name": {"type": "string", "description": "Environment name"},
+                description="List all configured AWX environments",
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
                 },
-                "required": ["env_name"],
-            },
-        ),
-        Tool(
-            name="env_get_active",
-            description="Get the currently active AWX environment",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-            },
-        ),
-        Tool(
-            name="env_test_connection",
-            description="Test connection to an AWX environment",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "env_name": {
-                        "type": "string",
-                        "description": "Environment name (optional, uses active if not specified)",
+            ),
+            Tool(
+                name="env_set_active",
+                description="Set the active AWX environment",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "env_name": {
+                            "type": "string",
+                            "description": "Environment name",
+                        },
+                    },
+                    "required": ["env_name"],
+                },
+            ),
+            Tool(
+                name="env_get_active",
+                description="Get the currently active AWX environment",
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
+                },
+            ),
+            Tool(
+                name="env_test_connection",
+                description="Test connection to an AWX environment",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "env_name": {
+                            "type": "string",
+                            "description": "Environment name (optional, uses active if not specified)",
+                        },
                     },
                 },
-            },
-        ),
-        # System Info
-        Tool(
-            name="awx_system_info",
-            description="Get AWX system information (config, dashboard, settings)",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "info_type": {
-                        "type": "string",
-                        "description": "Type of info: config, dashboard, settings, me",
-                        "enum": ["config", "dashboard", "settings", "me"],
+            ),
+            # System Info
+            Tool(
+                name="awx_system_info",
+                description="Get AWX system information (config, dashboard, settings)",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "info_type": {
+                            "type": "string",
+                            "description": "Type of info: config, dashboard, settings, me",
+                            "enum": ["config", "dashboard", "settings", "me"],
+                        },
+                    },
+                    "required": ["info_type"],
+                },
+            ),
+            # Organizations
+            Tool(
+                name="awx_organizations_list",
+                description="List AWX organizations",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "filter": {
+                            "type": "string",
+                            "description": "Filter organizations by name",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 25)",
+                        },
                     },
                 },
-                "required": ["info_type"],
-            },
-        ),
-        # Organizations
-        Tool(
-            name="awx_organizations_list",
-            description="List AWX organizations",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "filter": {"type": "string", "description": "Filter organizations by name"},
-                    "page": {"type": "number", "description": "Page number (default: 1)"},
-                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
-                },
-            },
-        ),
-        Tool(
-            name="awx_organization_get",
-            description="Get AWX organization by ID",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "org_id": {"type": "number", "description": "Organization ID"},
-                },
-                "required": ["org_id"],
-            },
-        ),
-        # Credentials
-        Tool(
-            name="awx_credentials_list",
-            description="List AWX credentials",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "filter": {"type": "string", "description": "Filter credentials by name"},
-                    "page": {"type": "number", "description": "Page number (default: 1)"},
-                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
-                },
-            },
-        ),
-        Tool(
-            name="awx_credential_types_list",
-            description="List AWX credential types",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "page": {"type": "number", "description": "Page number (default: 1)"},
-                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
-                },
-            },
-        ),
-        Tool(
-            name="awx_credential_create",
-            description="Create AWX credential",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "Credential name"},
-                    "credential_type": {"type": "number", "description": "Credential type ID"},
-                    "organization": {"type": "number", "description": "Organization ID"},
-                    "inputs": {"type": "object", "description": "Credential inputs (e.g., username, password)"},
-                    "description": {"type": "string", "description": "Credential description"},
-                },
-                "required": ["name", "credential_type", "organization", "inputs"],
-            },
-        ),
-        Tool(
-            name="awx_credential_delete",
-            description="Delete AWX credential",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "credential_id": {"type": "number", "description": "Credential ID"},
-                },
-                "required": ["credential_id"],
-            },
-        ),
-        # Discovery
-        Tool(
-            name="awx_templates_list",
-            description="List AWX job templates (NOT for recent jobs or job history). Templates are playbook definitions, configurations, settings. This shows available templates to run, not execution history or recent activity. For recent jobs/runs/executions, use awx_jobs_list instead.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "filter": {"type": "string", "description": "Filter templates by name"},
-                    "page": {"type": "number", "description": "Page number (default: 1)"},
-                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
-                },
-            },
-        ),
-        Tool(
-            name="awx_template_create",
-            description="Create AWX job template",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "Template name"},
-                    "inventory": {"type": "number", "description": "Inventory ID"},
-                    "project": {"type": "number", "description": "Project ID"},
-                    "playbook": {"type": "string", "description": "Playbook filename"},
-                    "job_type": {"type": "string", "description": "Job type (run or check)", "enum": ["run", "check"]},
-                    "description": {"type": "string", "description": "Template description"},
-                    "extra_vars": {"type": "object", "description": "Extra variables"},
-                    "limit": {"type": "string", "description": "Host limit pattern"},
-                },
-                "required": ["name", "inventory", "project", "playbook"],
-            },
-        ),
-        Tool(
-            name="awx_template_delete",
-            description="Delete AWX job template",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "template_id": {"type": "number", "description": "Template ID"},
-                },
-                "required": ["template_id"],
-            },
-        ),
-        Tool(
-            name="awx_projects_list",
-            description="List AWX projects",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "filter": {"type": "string", "description": "Filter projects by name"},
-                    "page": {"type": "number", "description": "Page number (default: 1)"},
-                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
-                },
-            },
-        ),
-        Tool(
-            name="awx_project_create",
-            description="Create AWX project",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "Project name"},
-                    "organization": {"type": "number", "description": "Organization ID"},
-                    "scm_type": {"type": "string", "description": "SCM type (git, svn, etc.)", "enum": ["git", "svn", "insights", "archive", ""]},
-                    "scm_url": {"type": "string", "description": "SCM repository URL"},
-                    "scm_branch": {"type": "string", "description": "SCM branch/tag/commit"},
-                    "description": {"type": "string", "description": "Project description"},
-                },
-                "required": ["name", "organization"],
-            },
-        ),
-        Tool(
-            name="awx_project_delete",
-            description="Delete AWX project",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "project_id": {"type": "number", "description": "Project ID"},
-                },
-                "required": ["project_id"],
-            },
-        ),
-        Tool(
-            name="awx_inventories_list",
-            description="List AWX inventories",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "filter": {"type": "string", "description": "Filter inventories by name"},
-                    "page": {"type": "number", "description": "Page number (default: 1)"},
-                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
-                },
-            },
-        ),
-        Tool(
-            name="awx_inventory_create",
-            description="Create AWX inventory",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "Inventory name"},
-                    "organization": {"type": "number", "description": "Organization ID"},
-                    "description": {"type": "string", "description": "Inventory description"},
-                    "variables": {"type": "object", "description": "Inventory variables"},
-                },
-                "required": ["name", "organization"],
-            },
-        ),
-        Tool(
-            name="awx_inventory_delete",
-            description="Delete AWX inventory",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "inventory_id": {"type": "number", "description": "Inventory ID"},
-                },
-                "required": ["inventory_id"],
-            },
-        ),
-        Tool(
-            name="awx_inventory_groups_list",
-            description="List groups in AWX inventory",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "inventory_id": {"type": "number", "description": "Inventory ID"},
-                    "page": {"type": "number", "description": "Page number (default: 1)"},
-                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
-                },
-                "required": ["inventory_id"],
-            },
-        ),
-        Tool(
-            name="awx_inventory_group_create",
-            description="Create group in AWX inventory",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "inventory_id": {"type": "number", "description": "Inventory ID"},
-                    "name": {"type": "string", "description": "Group name"},
-                    "description": {"type": "string", "description": "Group description"},
-                    "variables": {"type": "object", "description": "Group variables"},
-                },
-                "required": ["inventory_id", "name"],
-            },
-        ),
-        Tool(
-            name="awx_inventory_group_delete",
-            description="Delete group from AWX inventory",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "group_id": {"type": "number", "description": "Group ID"},
-                },
-                "required": ["group_id"],
-            },
-        ),
-        Tool(
-            name="awx_inventory_hosts_list",
-            description="List hosts in AWX inventory",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "inventory_id": {"type": "number", "description": "Inventory ID"},
-                    "page": {"type": "number", "description": "Page number (default: 1)"},
-                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
-                },
-                "required": ["inventory_id"],
-            },
-        ),
-        Tool(
-            name="awx_inventory_host_create",
-            description="Create host in AWX inventory",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "inventory_id": {"type": "number", "description": "Inventory ID"},
-                    "name": {"type": "string", "description": "Host name"},
-                    "description": {"type": "string", "description": "Host description"},
-                    "variables": {"type": "object", "description": "Host variables"},
-                },
-                "required": ["inventory_id", "name"],
-            },
-        ),
-        Tool(
-            name="awx_inventory_host_delete",
-            description="Delete host from AWX inventory",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "host_id": {"type": "number", "description": "Host ID"},
-                },
-                "required": ["host_id"],
-            },
-        ),
-        Tool(
-            name="awx_project_update",
-            description="Update AWX project from SCM",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "project_id": {"type": "number", "description": "Project ID"},
-                    "wait": {"type": "boolean", "description": "Wait for update to complete"},
-                },
-                "required": ["project_id"],
-            },
-        ),
-        # Execution
-        Tool(
-            name="awx_job_launch",
-            description="Launch/execute/run/start a new AWX job from a template. Creates a new job execution instance.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "template_id": {"type": "number", "description": "Job template ID to execute"},
-                    "extra_vars": {"type": "object", "description": "Extra variables (JSON) to pass to playbook"},
-                    "limit": {"type": "string", "description": "Limit execution to specific hosts"},
-                    "tags": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Ansible tags to run",
+            ),
+            Tool(
+                name="awx_organization_get",
+                description="Get AWX organization by ID",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "org_id": {"type": "number", "description": "Organization ID"},
                     },
-                    "skip_tags": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Ansible tags to skip",
+                    "required": ["org_id"],
+                },
+            ),
+            # Credentials
+            Tool(
+                name="awx_credentials_list",
+                description="List AWX credentials",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "filter": {
+                            "type": "string",
+                            "description": "Filter credentials by name",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 25)",
+                        },
                     },
                 },
-                "required": ["template_id"],
-            },
-        ),
-        Tool(
-            name="awx_job_get",
-            description="Get specific AWX job metadata and summary details including status, timing, template info, and playbook name. Use this to check a single job's current state, whether it succeeded or failed, and its start/finish times. Does NOT return console output or logs — use awx_job_stdout for that.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "job_id": {"type": "number", "description": "Job ID from job execution"},
-                },
-                "required": ["job_id"],
-            },
-        ),
-        Tool(
-            name="awx_jobs_list",
-            description="Show/list/display/view recent AWX jobs, job execution history, completed jobs, running jobs, failed jobs, job status, job runs, playbook executions. Use this when user asks to 'show recent jobs', 'list jobs', 'view jobs', 'get jobs', 'display job history', 'see recent activity', 'check job status', or any query about AWX job executions with timestamps and results.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "status": {"type": "string", "description": "Filter by status (successful, failed, running, etc.)"},
-                    "created_after": {"type": "string", "description": "Filter by created date (ISO format)"},
-                    "page": {"type": "number", "description": "Page number (default: 1)"},
-                    "page_size": {"type": "number", "description": "Page size (default: 25)"},
-                },
-            },
-        ),
-        Tool(
-            name="awx_job_cancel",
-            description="Cancel/stop/abort a currently running AWX job execution. Use this when user asks to 'cancel job', 'stop job', 'abort job', 'kill job', or any request to halt a running job.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "job_id": {"type": "number", "description": "Job ID"},
-                },
-                "required": ["job_id"],
-            },
-        ),
-        Tool(
-            name="awx_job_delete",
-            description="Delete/remove an AWX job record from history. Use this when user asks to 'delete job', 'remove job', 'clean up job', or any request to permanently remove a job record.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "job_id": {"type": "number", "description": "Job ID"},
-                },
-                "required": ["job_id"],
-            },
-        ),
-        # Diagnostics
-        Tool(
-            name="awx_job_stdout",
-            description="Show/display/view/get the console output, stdout, logs, or terminal output of an AWX job execution. Use this when user asks to 'show job output', 'view job logs', 'display console output', 'get job stdout', 'show what the job printed', 'see the playbook output', 'show execution log', or any request to see the text/log output produced by a job run.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "job_id": {"type": "number", "description": "Job ID to retrieve output for"},
-                    "format": {
-                        "type": "string",
-                        "description": "Output format (txt or json)",
-                        "enum": ["txt", "json"],
-                    },
-                    "tail_lines": {"type": "number", "description": "Number of lines from end (omit to get all output)"},
-                },
-                "required": ["job_id"],
-            },
-        ),
-        Tool(
-            name="awx_job_events",
-            description="Show/list/view/get detailed events, tasks, plays, and execution steps of an AWX job. Use this when user asks to 'show job events', 'view job tasks', 'list execution steps', 'see what tasks ran', 'show detailed job activity', 'view play-by-play execution', or any request about the individual task/play events within a job run. Can filter to show only failed events.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "job_id": {"type": "number", "description": "Job ID to retrieve events for"},
-                    "failed_only": {"type": "boolean", "description": "Show only failed events (default: false)"},
-                    "page": {"type": "number", "description": "Page number (default: 1)"},
-                    "page_size": {"type": "number", "description": "Page size (default: 100)"},
-                },
-                "required": ["job_id"],
-            },
-        ),
-        Tool(
-            name="awx_job_failure_summary",
-            description="Analyze/diagnose/debug/troubleshoot why an AWX job failed and get actionable fix suggestions. Use this when user asks 'why did job fail', 'analyze failure', 'debug job error', 'show failure summary', 'what went wrong with job', 'diagnose job problem', 'troubleshoot job', or any request to understand and fix a failed job execution.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "job_id": {"type": "number", "description": "Job ID of the failed job to analyze"},
-                },
-                "required": ["job_id"],
-            },
-        ),
-        # ── Local Ansible Development Tools ──
-        Tool(
-            name="create_playbook",
-            description="Create/write/generate an Ansible playbook YAML file locally. Use this when user asks to 'create a playbook', 'write a playbook', 'generate a playbook', 'make a new playbook', or wants to author Ansible YAML content before running it on AWX.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "Playbook filename (e.g., 'deploy.yml')"},
-                    "content": {
-                        "description": "Playbook content as YAML string, dict (single play), or list of plays",
-                    },
-                    "workspace": {"type": "string", "description": "Directory to save in (default: ~/.awx-mcp/playbooks)"},
-                    "overwrite": {"type": "boolean", "description": "Overwrite if file exists (default: false)"},
-                },
-                "required": ["name", "content"],
-            },
-        ),
-        Tool(
-            name="validate_playbook",
-            description="Validate/check/lint Ansible playbook syntax using ansible-playbook --syntax-check. Use this when user asks to 'validate playbook', 'check playbook syntax', 'lint playbook', 'verify playbook', or wants to ensure a playbook is syntactically correct before running it.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "playbook": {"type": "string", "description": "Playbook filename or full path"},
-                    "workspace": {"type": "string", "description": "Workspace directory (if playbook is just a name)"},
-                    "inventory": {"type": "string", "description": "Inventory file/path for validation"},
-                },
-                "required": ["playbook"],
-            },
-        ),
-        Tool(
-            name="ansible_playbook",
-            description="Execute/run an Ansible playbook locally for development and testing. Use this when user asks to 'run playbook locally', 'execute playbook', 'test playbook', 'dry-run playbook', or wants to run a playbook in their dev environment before pushing to AWX. Supports check mode (dry-run), extra vars, tags, and host limits.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "playbook": {"type": "string", "description": "Playbook filename or full path"},
-                    "workspace": {"type": "string", "description": "Workspace directory"},
-                    "inventory": {"type": "string", "description": "Inventory file/string (default: localhost)"},
-                    "extra_vars": {"type": "object", "description": "Extra variables dict to pass to playbook"},
-                    "limit": {"type": "string", "description": "Host limit pattern"},
-                    "tags": {"type": "array", "items": {"type": "string"}, "description": "Ansible tags to run"},
-                    "skip_tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to skip"},
-                    "check_mode": {"type": "boolean", "description": "Dry-run mode (--check), default: false"},
-                    "verbose": {"type": "number", "description": "Verbosity level 0-4 (default: 0)"},
-                },
-                "required": ["playbook"],
-            },
-        ),
-        Tool(
-            name="ansible_task",
-            description="Run an ad-hoc Ansible task/module locally. Use this when user asks to 'run ansible module', 'execute ad-hoc task', 'ping hosts', 'run shell command with ansible', 'test ansible module', or wants to run a single Ansible module without a playbook. Defaults to connection=local for localhost.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "module": {"type": "string", "description": "Ansible module name (e.g., 'ping', 'shell', 'copy', 'debug')"},
-                    "args": {"type": "string", "description": "Module arguments string (e.g., 'msg=hello' for debug)"},
-                    "hosts": {"type": "string", "description": "Host pattern (default: localhost)"},
-                    "inventory": {"type": "string", "description": "Inventory file/string"},
-                    "extra_vars": {"type": "object", "description": "Extra variables"},
-                    "connection": {"type": "string", "description": "Connection type (default: local)"},
-                    "become": {"type": "boolean", "description": "Use privilege escalation (sudo)"},
-                },
-                "required": ["module"],
-            },
-        ),
-        Tool(
-            name="ansible_role",
-            description="Execute/run an Ansible role locally by generating a temporary playbook. Use this when user asks to 'run a role', 'execute role', 'test role locally', or wants to apply a specific role from their project without writing a full playbook.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "role": {"type": "string", "description": "Role name or path"},
-                    "hosts": {"type": "string", "description": "Target hosts (default: localhost)"},
-                    "workspace": {"type": "string", "description": "Workspace directory containing roles/"},
-                    "inventory": {"type": "string", "description": "Inventory file/string"},
-                    "extra_vars": {"type": "object", "description": "Extra variables to pass to role"},
-                    "connection": {"type": "string", "description": "Connection type (default: local)"},
-                },
-                "required": ["role"],
-            },
-        ),
-        Tool(
-            name="create_role_structure",
-            description="Scaffold/generate/create an Ansible role directory structure with standard subdirectories (tasks, handlers, templates, files, vars, defaults, meta). Use this when user asks to 'create a role', 'scaffold a role', 'generate role skeleton', 'init role structure', or wants to set up a new role from scratch.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "Role name"},
-                    "workspace": {"type": "string", "description": "Workspace where roles/ directory lives"},
-                    "include_dirs": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Subdirectories to include (default: all standard dirs)",
+            ),
+            Tool(
+                name="awx_credential_types_list",
+                description="List AWX credential types",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 25)",
+                        },
                     },
                 },
-                "required": ["name"],
-            },
-        ),
-        Tool(
-            name="list_playbooks",
-            description="List/show/display all Ansible playbooks in the workspace or project directory. Use this when user asks to 'list playbooks', 'show my playbooks', 'what playbooks exist', 'find playbooks'.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "workspace": {"type": "string", "description": "Workspace directory to scan (default: ~/.awx-mcp/playbooks)"},
+            ),
+            Tool(
+                name="awx_credential_create",
+                description="Create AWX credential",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Credential name"},
+                        "credential_type": {
+                            "type": "number",
+                            "description": "Credential type ID",
+                        },
+                        "organization": {
+                            "type": "number",
+                            "description": "Organization ID",
+                        },
+                        "inputs": {
+                            "type": "object",
+                            "description": "Credential inputs (e.g., username, password)",
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "Credential description",
+                        },
+                    },
+                    "required": ["name", "credential_type", "organization", "inputs"],
                 },
-            },
-        ),
-        Tool(
-            name="list_roles",
-            description="List/show/display all Ansible roles in the workspace. Use this when user asks to 'list roles', 'show my roles', 'what roles exist'.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "workspace": {"type": "string", "description": "Workspace directory (default: ~/.awx-mcp/playbooks)"},
+            ),
+            Tool(
+                name="awx_credential_delete",
+                description="Delete AWX credential",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "credential_id": {
+                            "type": "number",
+                            "description": "Credential ID",
+                        },
+                    },
+                    "required": ["credential_id"],
                 },
-            },
-        ),
-        Tool(
-            name="ansible_inventory",
-            description="List/show Ansible inventory hosts and groups using ansible-inventory. Use this when user asks to 'list inventory hosts', 'show inventory groups', 'display local inventory', 'what hosts are in my inventory file'.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "inventory": {"type": "string", "description": "Inventory file, path, or host list (default: localhost)"},
-                    "workspace": {"type": "string", "description": "Working directory"},
+            ),
+            # Notification Templates
+            Tool(
+                name="awx_notification_templates_list",
+                description="List AWX notification templates. Shows configured notifications (Slack, email, webhook, etc.) and their types.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "filter": {
+                            "type": "string",
+                            "description": "Filter notification templates by name",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 25)",
+                        },
+                    },
                 },
-            },
-        ),
-        # ── Project Registry Tools ──
-        Tool(
-            name="register_project",
-            description="Register/add a local Ansible project directory for easy reuse. Use this when user asks to 'register project', 'add project', 'set up project', 'configure my ansible project'. Auto-detects git remote URL, inventory, and default playbook.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "Project alias name"},
-                    "path": {"type": "string", "description": "Absolute path to project root directory"},
-                    "scm_url": {"type": "string", "description": "Git remote URL (auto-detected if not provided)"},
-                    "scm_branch": {"type": "string", "description": "Git branch (default: main)"},
-                    "inventory": {"type": "string", "description": "Default inventory file relative to project root"},
-                    "default_playbook": {"type": "string", "description": "Default playbook filename"},
-                    "description": {"type": "string", "description": "Project description"},
-                    "set_default": {"type": "boolean", "description": "Set as the default project"},
+            ),
+            Tool(
+                name="awx_notification_template_get",
+                description="Get details of a specific AWX notification template by ID, including its type, configuration, and custom messages.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Notification template ID",
+                        },
+                    },
+                    "required": ["template_id"],
                 },
-                "required": ["name", "path"],
-            },
-        ),
-        Tool(
-            name="unregister_project",
-            description="Remove/unregister a local Ansible project from the registry. Use when user asks to 'remove project', 'unregister project', 'delete project registration'.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "Project alias name to remove"},
+            ),
+            Tool(
+                name="awx_notification_template_create",
+                description="Create a new AWX notification template (Slack, email, webhook, etc.).",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Notification template name",
+                        },
+                        "organization": {
+                            "type": "number",
+                            "description": "Organization ID",
+                        },
+                        "notification_type": {
+                            "type": "string",
+                            "description": "Notification type",
+                            "enum": [
+                                "slack",
+                                "email",
+                                "webhook",
+                                "pagerduty",
+                                "grafana",
+                                "twilio",
+                                "irc",
+                                "mattermost",
+                                "rocketchat",
+                            ],
+                        },
+                        "notification_configuration": {
+                            "type": "object",
+                            "description": "Type-specific config (e.g., {token, channels, hex_color} for Slack, {url} for webhook)",
+                        },
+                        "description": {"type": "string", "description": "Description"},
+                        "messages": {
+                            "type": "object",
+                            "description": "Custom messages per event, e.g., {started: {message: '...'}, success: {message: '...'}, error: {message: '...'}}",
+                        },
+                    },
+                    "required": ["name", "organization", "notification_type"],
                 },
-                "required": ["name"],
-            },
-        ),
-        Tool(
-            name="list_registered_projects",
-            description="List/show all registered local Ansible projects and the default. Use this when user asks to 'list my projects', 'show registered projects', 'what projects are configured'.",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-            },
-        ),
-        Tool(
-            name="project_playbooks",
-            description="Discover/find/list playbooks and roles under a registered project root. Use this when user asks to 'show project playbooks', 'find playbooks in project', 'discover playbooks', 'what playbooks does project have', 'list project roles'.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "project_name": {"type": "string", "description": "Registered project name (uses default if not specified)"},
-                    "project_path": {"type": "string", "description": "Direct path to scan (overrides project_name)"},
+            ),
+            Tool(
+                name="awx_notification_template_test",
+                description="Send a test notification from a notification template. Useful for verifying the template configuration (Slack channel, webhook URL, etc.) is working.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Notification template ID to test",
+                        },
+                    },
+                    "required": ["template_id"],
                 },
-            },
-        ),
-        Tool(
-            name="project_run_playbook",
-            description="Run a playbook using a registered project's inventory and environment. Use this when user asks to 'run project playbook', 'execute playbook from project', 'test project playbook locally'. Automatically uses the project's configured inventory.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "playbook": {"type": "string", "description": "Playbook filename (relative to project root)"},
-                    "project_name": {"type": "string", "description": "Registered project name (uses default if not provided)"},
-                    "extra_vars": {"type": "object", "description": "Extra variables"},
-                    "limit": {"type": "string", "description": "Host limit pattern"},
-                    "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to run"},
-                    "skip_tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to skip"},
-                    "check_mode": {"type": "boolean", "description": "Dry-run mode (--check)"},
-                    "verbose": {"type": "number", "description": "Verbosity level 0-4"},
+            ),
+            Tool(
+                name="awx_notifications_list",
+                description="List sent notification history/delivery log. Shows notification status (pending, successful, failed), recipients, and errors. Can filter by notification template or status.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "notification_template_id": {
+                            "type": "number",
+                            "description": "Filter by notification template ID",
+                        },
+                        "status": {
+                            "type": "string",
+                            "description": "Filter by status (pending, successful, failed)",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 25)",
+                        },
+                    },
                 },
-                "required": ["playbook"],
-            },
-        ),
-        Tool(
-            name="git_push_project",
-            description="Stage, commit, and push project changes to git remote (GitHub/GitLab). Use this when user asks to 'push to git', 'commit and push', 'push playbook changes', 'push project to github', 'publish changes'. After pushing, use awx_project_update to sync AWX.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "project_name": {"type": "string", "description": "Registered project name (uses default if not provided)"},
-                    "commit_message": {"type": "string", "description": "Git commit message (default: 'Update playbooks via AWX MCP')"},
-                    "branch": {"type": "string", "description": "Branch to push to (default: from project config)"},
-                    "add_all": {"type": "boolean", "description": "Stage all changes with git add -A (default: true)"},
+            ),
+            Tool(
+                name="awx_notification_template_update",
+                description="Update an existing AWX notification template. Only provided fields are changed (partial update).",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Notification template ID",
+                        },
+                        "name": {"type": "string", "description": "New name"},
+                        "description": {
+                            "type": "string",
+                            "description": "New description",
+                        },
+                        "notification_configuration": {
+                            "type": "object",
+                            "description": "Updated type-specific config",
+                        },
+                        "messages": {
+                            "type": "object",
+                            "description": "Updated custom messages per event",
+                        },
+                    },
+                    "required": ["template_id"],
                 },
-            },
-        ),
-    ]
-
+            ),
+            Tool(
+                name="awx_notification_template_delete",
+                description="Delete an AWX notification template.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Notification template ID to delete",
+                        },
+                    },
+                    "required": ["template_id"],
+                },
+            ),
+            Tool(
+                name="awx_job_template_notifications_list",
+                description="List notification templates associated with a job template, showing which notifications fire on started, success, and error events.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Job template ID",
+                        },
+                    },
+                    "required": ["template_id"],
+                },
+            ),
+            Tool(
+                name="awx_job_template_notification_associate",
+                description="Associate/attach a notification template to a job template for a specific event (started, success, or error).",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Job template ID",
+                        },
+                        "notification_template_id": {
+                            "type": "number",
+                            "description": "Notification template ID to attach",
+                        },
+                        "event": {
+                            "type": "string",
+                            "description": "Event to trigger notification on",
+                            "enum": ["started", "success", "error"],
+                        },
+                    },
+                    "required": ["template_id", "notification_template_id", "event"],
+                },
+            ),
+            Tool(
+                name="awx_job_template_notification_disassociate",
+                description="Disassociate/remove a notification template from a job template for a specific event (started, success, or error).",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Job template ID",
+                        },
+                        "notification_template_id": {
+                            "type": "number",
+                            "description": "Notification template ID to remove",
+                        },
+                        "event": {
+                            "type": "string",
+                            "description": "Event to remove notification from",
+                            "enum": ["started", "success", "error"],
+                        },
+                    },
+                    "required": ["template_id", "notification_template_id", "event"],
+                },
+            ),
+            Tool(
+                name="awx_workflow_template_notifications_list",
+                description="List notification templates associated with a workflow job template, showing which notifications fire on started, success, and error events.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Workflow job template ID",
+                        },
+                    },
+                    "required": ["template_id"],
+                },
+            ),
+            Tool(
+                name="awx_workflow_template_notification_associate",
+                description="Associate/attach a notification template to a workflow job template for a specific event (started, success, or error).",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Workflow job template ID",
+                        },
+                        "notification_template_id": {
+                            "type": "number",
+                            "description": "Notification template ID to attach",
+                        },
+                        "event": {
+                            "type": "string",
+                            "description": "Event to trigger notification on",
+                            "enum": ["started", "success", "error"],
+                        },
+                    },
+                    "required": ["template_id", "notification_template_id", "event"],
+                },
+            ),
+            Tool(
+                name="awx_workflow_template_notification_disassociate",
+                description="Disassociate/remove a notification template from a workflow job template for a specific event (started, success, or error).",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Workflow job template ID",
+                        },
+                        "notification_template_id": {
+                            "type": "number",
+                            "description": "Notification template ID to remove",
+                        },
+                        "event": {
+                            "type": "string",
+                            "description": "Event to remove notification from",
+                            "enum": ["started", "success", "error"],
+                        },
+                    },
+                    "required": ["template_id", "notification_template_id", "event"],
+                },
+            ),
+            # Discovery
+            Tool(
+                name="awx_templates_list",
+                description="List AWX job templates (NOT for recent jobs or job history). Templates are playbook definitions, configurations, settings. This shows available templates to run, not execution history or recent activity. For recent jobs/runs/executions, use awx_jobs_list instead.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "filter": {
+                            "type": "string",
+                            "description": "Filter templates by name",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 25)",
+                        },
+                    },
+                },
+            ),
+            Tool(
+                name="awx_template_create",
+                description="Create AWX job template",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Template name"},
+                        "inventory": {"type": "number", "description": "Inventory ID"},
+                        "project": {"type": "number", "description": "Project ID"},
+                        "playbook": {
+                            "type": "string",
+                            "description": "Playbook filename",
+                        },
+                        "job_type": {
+                            "type": "string",
+                            "description": "Job type (run or check)",
+                            "enum": ["run", "check"],
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "Template description",
+                        },
+                        "extra_vars": {
+                            "type": "object",
+                            "description": "Extra variables",
+                        },
+                        "limit": {
+                            "type": "string",
+                            "description": "Host limit pattern",
+                        },
+                    },
+                    "required": ["name", "inventory", "project", "playbook"],
+                },
+            ),
+            Tool(
+                name="awx_template_delete",
+                description="Delete AWX job template",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {"type": "number", "description": "Template ID"},
+                    },
+                    "required": ["template_id"],
+                },
+            ),
+            Tool(
+                name="awx_projects_list",
+                description="List AWX projects",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "filter": {
+                            "type": "string",
+                            "description": "Filter projects by name",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 25)",
+                        },
+                    },
+                },
+            ),
+            Tool(
+                name="awx_project_create",
+                description="Create AWX project",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Project name"},
+                        "organization": {
+                            "type": "number",
+                            "description": "Organization ID",
+                        },
+                        "scm_type": {
+                            "type": "string",
+                            "description": "SCM type (git, svn, etc.)",
+                            "enum": ["git", "svn", "insights", "archive", ""],
+                        },
+                        "scm_url": {
+                            "type": "string",
+                            "description": "SCM repository URL",
+                        },
+                        "scm_branch": {
+                            "type": "string",
+                            "description": "SCM branch/tag/commit",
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "Project description",
+                        },
+                    },
+                    "required": ["name", "organization"],
+                },
+            ),
+            Tool(
+                name="awx_project_delete",
+                description="Delete AWX project",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "project_id": {"type": "number", "description": "Project ID"},
+                    },
+                    "required": ["project_id"],
+                },
+            ),
+            Tool(
+                name="awx_inventories_list",
+                description="List AWX inventories",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "filter": {
+                            "type": "string",
+                            "description": "Filter inventories by name",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 25)",
+                        },
+                    },
+                },
+            ),
+            Tool(
+                name="awx_inventory_create",
+                description="Create AWX inventory",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Inventory name"},
+                        "organization": {
+                            "type": "number",
+                            "description": "Organization ID",
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "Inventory description",
+                        },
+                        "variables": {
+                            "type": "object",
+                            "description": "Inventory variables",
+                        },
+                    },
+                    "required": ["name", "organization"],
+                },
+            ),
+            Tool(
+                name="awx_inventory_delete",
+                description="Delete AWX inventory",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "inventory_id": {
+                            "type": "number",
+                            "description": "Inventory ID",
+                        },
+                    },
+                    "required": ["inventory_id"],
+                },
+            ),
+            Tool(
+                name="awx_inventory_groups_list",
+                description="List groups in AWX inventory",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "inventory_id": {
+                            "type": "number",
+                            "description": "Inventory ID",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 25)",
+                        },
+                    },
+                    "required": ["inventory_id"],
+                },
+            ),
+            Tool(
+                name="awx_inventory_group_create",
+                description="Create group in AWX inventory",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "inventory_id": {
+                            "type": "number",
+                            "description": "Inventory ID",
+                        },
+                        "name": {"type": "string", "description": "Group name"},
+                        "description": {
+                            "type": "string",
+                            "description": "Group description",
+                        },
+                        "variables": {
+                            "type": "object",
+                            "description": "Group variables",
+                        },
+                    },
+                    "required": ["inventory_id", "name"],
+                },
+            ),
+            Tool(
+                name="awx_inventory_group_delete",
+                description="Delete group from AWX inventory",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "group_id": {"type": "number", "description": "Group ID"},
+                    },
+                    "required": ["group_id"],
+                },
+            ),
+            Tool(
+                name="awx_inventory_hosts_list",
+                description="List hosts in AWX inventory",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "inventory_id": {
+                            "type": "number",
+                            "description": "Inventory ID",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 25)",
+                        },
+                    },
+                    "required": ["inventory_id"],
+                },
+            ),
+            Tool(
+                name="awx_inventory_host_create",
+                description="Create host in AWX inventory",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "inventory_id": {
+                            "type": "number",
+                            "description": "Inventory ID",
+                        },
+                        "name": {"type": "string", "description": "Host name"},
+                        "description": {
+                            "type": "string",
+                            "description": "Host description",
+                        },
+                        "variables": {
+                            "type": "object",
+                            "description": "Host variables",
+                        },
+                    },
+                    "required": ["inventory_id", "name"],
+                },
+            ),
+            Tool(
+                name="awx_inventory_host_delete",
+                description="Delete host from AWX inventory",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "host_id": {"type": "number", "description": "Host ID"},
+                    },
+                    "required": ["host_id"],
+                },
+            ),
+            Tool(
+                name="awx_project_update",
+                description="Update AWX project from SCM",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "project_id": {"type": "number", "description": "Project ID"},
+                        "wait": {
+                            "type": "boolean",
+                            "description": "Wait for update to complete",
+                        },
+                    },
+                    "required": ["project_id"],
+                },
+            ),
+            # Execution
+            Tool(
+                name="awx_job_launch",
+                description="Launch/execute/run/start a new AWX job from a template. Creates a new job execution instance.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Job template ID to execute",
+                        },
+                        "extra_vars": {
+                            "type": "object",
+                            "description": "Extra variables (JSON) to pass to playbook",
+                        },
+                        "limit": {
+                            "type": "string",
+                            "description": "Limit execution to specific hosts",
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Ansible tags to run",
+                        },
+                        "skip_tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Ansible tags to skip",
+                        },
+                    },
+                    "required": ["template_id"],
+                },
+            ),
+            Tool(
+                name="awx_job_get",
+                description="Get specific AWX job metadata and summary details including status, timing, template info, and playbook name. Use this to check a single job's current state, whether it succeeded or failed, and its start/finish times. Does NOT return console output or logs — use awx_job_stdout for that.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "job_id": {
+                            "type": "number",
+                            "description": "Job ID from job execution",
+                        },
+                    },
+                    "required": ["job_id"],
+                },
+            ),
+            Tool(
+                name="awx_jobs_list",
+                description="Show/list/display/view recent AWX jobs, job execution history, completed jobs, running jobs, failed jobs, job status, job runs, playbook executions. Use this when user asks to 'show recent jobs', 'list jobs', 'view jobs', 'get jobs', 'display job history', 'see recent activity', 'check job status', or any query about AWX job executions with timestamps and results.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "status": {
+                            "type": "string",
+                            "description": "Filter by status (successful, failed, running, etc.)",
+                        },
+                        "created_after": {
+                            "type": "string",
+                            "description": "Filter by created date (ISO format)",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 25)",
+                        },
+                    },
+                },
+            ),
+            Tool(
+                name="awx_job_cancel",
+                description="Cancel/stop/abort a currently running AWX job execution. Use this when user asks to 'cancel job', 'stop job', 'abort job', 'kill job', or any request to halt a running job.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "job_id": {"type": "number", "description": "Job ID"},
+                    },
+                    "required": ["job_id"],
+                },
+            ),
+            Tool(
+                name="awx_job_delete",
+                description="Delete/remove an AWX job record from history. Use this when user asks to 'delete job', 'remove job', 'clean up job', or any request to permanently remove a job record.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "job_id": {"type": "number", "description": "Job ID"},
+                    },
+                    "required": ["job_id"],
+                },
+            ),
+            # Diagnostics
+            Tool(
+                name="awx_job_stdout",
+                description="Show/display/view/get the console output, stdout, logs, or terminal output of an AWX job execution. Use this when user asks to 'show job output', 'view job logs', 'display console output', 'get job stdout', 'show what the job printed', 'see the playbook output', 'show execution log', or any request to see the text/log output produced by a job run.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "job_id": {
+                            "type": "number",
+                            "description": "Job ID to retrieve output for",
+                        },
+                        "format": {
+                            "type": "string",
+                            "description": "Output format (txt or json)",
+                            "enum": ["txt", "json"],
+                        },
+                        "tail_lines": {
+                            "type": "number",
+                            "description": "Number of lines from end (omit to get all output)",
+                        },
+                    },
+                    "required": ["job_id"],
+                },
+            ),
+            Tool(
+                name="awx_job_events",
+                description="Show/list/view/get detailed events, tasks, plays, and execution steps of an AWX job. Use this when user asks to 'show job events', 'view job tasks', 'list execution steps', 'see what tasks ran', 'show detailed job activity', 'view play-by-play execution', or any request about the individual task/play events within a job run. Can filter to show only failed events.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "job_id": {
+                            "type": "number",
+                            "description": "Job ID to retrieve events for",
+                        },
+                        "failed_only": {
+                            "type": "boolean",
+                            "description": "Show only failed events (default: false)",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 100)",
+                        },
+                    },
+                    "required": ["job_id"],
+                },
+            ),
+            Tool(
+                name="awx_job_failure_summary",
+                description="Analyze/diagnose/debug/troubleshoot why an AWX job failed and get actionable fix suggestions. Use this when user asks 'why did job fail', 'analyze failure', 'debug job error', 'show failure summary', 'what went wrong with job', 'diagnose job problem', 'troubleshoot job', or any request to understand and fix a failed job execution.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "job_id": {
+                            "type": "number",
+                            "description": "Job ID of the failed job to analyze",
+                        },
+                    },
+                    "required": ["job_id"],
+                },
+            ),
+            # ── Workflow Job Templates ──
+            Tool(
+                name="awx_workflow_templates_list",
+                description="List AWX workflow job templates. Workflow templates define multi-step automation pipelines that chain multiple job templates together. Use this when user asks to 'list workflows', 'show workflow templates', 'what workflows exist'.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "filter": {
+                            "type": "string",
+                            "description": "Filter workflow templates by name",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 25)",
+                        },
+                    },
+                },
+            ),
+            Tool(
+                name="awx_workflow_template_get",
+                description="Get details of a specific AWX workflow job template by ID, including its configuration, launch options, schedule info, and status.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Workflow job template ID",
+                        },
+                    },
+                    "required": ["template_id"],
+                },
+            ),
+            Tool(
+                name="awx_workflow_job_launch",
+                description="Launch/execute/run a workflow job from a workflow job template. Creates a new workflow job that orchestrates multiple steps.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Workflow job template ID to execute",
+                        },
+                        "extra_vars": {
+                            "type": "object",
+                            "description": "Extra variables (JSON) to pass to the workflow",
+                        },
+                        "limit": {
+                            "type": "string",
+                            "description": "Limit execution to specific hosts",
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Job tags to apply",
+                        },
+                        "skip_tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Job tags to skip",
+                        },
+                    },
+                    "required": ["template_id"],
+                },
+            ),
+            Tool(
+                name="awx_workflow_job_get",
+                description="Get status and details of a specific AWX workflow job execution, including timing, launch type, and failure explanation.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "job_id": {"type": "number", "description": "Workflow job ID"},
+                    },
+                    "required": ["job_id"],
+                },
+            ),
+            Tool(
+                name="awx_workflow_jobs_list",
+                description="List recent AWX workflow job executions and their statuses. Use this to see workflow run history.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "status": {
+                            "type": "string",
+                            "description": "Filter by status (successful, failed, running, etc.)",
+                        },
+                        "workflow_template_id": {
+                            "type": "number",
+                            "description": "Filter by workflow job template ID",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 25)",
+                        },
+                    },
+                },
+            ),
+            Tool(
+                name="awx_workflow_job_cancel",
+                description="Cancel/stop a running AWX workflow job execution.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "job_id": {
+                            "type": "number",
+                            "description": "Workflow job ID to cancel",
+                        },
+                    },
+                    "required": ["job_id"],
+                },
+            ),
+            Tool(
+                name="awx_workflow_job_nodes",
+                description="Get the individual step/node details of an AWX workflow job execution. Shows each node's job template, status, elapsed time, and connection graph (success/failure/always paths). Use this to see which steps passed or failed in a workflow run.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "job_id": {"type": "number", "description": "Workflow job ID"},
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 100)",
+                        },
+                    },
+                    "required": ["job_id"],
+                },
+            ),
+            Tool(
+                name="awx_workflow_job_delete",
+                description="Delete an AWX workflow job record from history.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "job_id": {
+                            "type": "number",
+                            "description": "Workflow job ID to delete",
+                        },
+                    },
+                    "required": ["job_id"],
+                },
+            ),
+            Tool(
+                name="awx_workflow_job_relaunch",
+                description="Relaunch/rerun a previous AWX workflow job execution. Creates a new workflow job from the same template with the same parameters.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "job_id": {
+                            "type": "number",
+                            "description": "Workflow job ID to relaunch",
+                        },
+                    },
+                    "required": ["job_id"],
+                },
+            ),
+            Tool(
+                name="awx_workflow_template_nodes",
+                description="Get the workflow job template node definitions — the graph of steps that make up the workflow template. Shows which job templates/projects/inventory sources are chained together and how (success/failure/always paths).",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Workflow job template ID",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 100)",
+                        },
+                    },
+                    "required": ["template_id"],
+                },
+            ),
+            Tool(
+                name="awx_workflow_template_survey",
+                description="Get the survey spec for a workflow job template. Shows survey questions that are prompted when launching the workflow.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Workflow job template ID",
+                        },
+                    },
+                    "required": ["template_id"],
+                },
+            ),
+            Tool(
+                name="awx_workflow_template_schedules",
+                description="List schedules configured for a workflow job template. Shows when the workflow is set to run automatically.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Workflow job template ID",
+                        },
+                        "page": {
+                            "type": "number",
+                            "description": "Page number (default: 1)",
+                        },
+                        "page_size": {
+                            "type": "number",
+                            "description": "Page size (default: 25)",
+                        },
+                    },
+                    "required": ["template_id"],
+                },
+            ),
+            Tool(
+                name="awx_workflow_template_launch_config",
+                description="Get the launch configuration for a workflow job template. Shows which fields can be prompted on launch (inventory, limit, variables, etc.) and their defaults.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "number",
+                            "description": "Workflow job template ID",
+                        },
+                    },
+                    "required": ["template_id"],
+                },
+            ),
+            # ── Local Ansible Development Tools ──
+            Tool(
+                name="create_playbook",
+                description="Create/write/generate an Ansible playbook YAML file locally. Use this when user asks to 'create a playbook', 'write a playbook', 'generate a playbook', 'make a new playbook', or wants to author Ansible YAML content before running it on AWX.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Playbook filename (e.g., 'deploy.yml')",
+                        },
+                        "content": {
+                            "description": "Playbook content as YAML string, dict (single play), or list of plays",
+                        },
+                        "workspace": {
+                            "type": "string",
+                            "description": "Directory to save in (default: ~/.awx-mcp/playbooks)",
+                        },
+                        "overwrite": {
+                            "type": "boolean",
+                            "description": "Overwrite if file exists (default: false)",
+                        },
+                    },
+                    "required": ["name", "content"],
+                },
+            ),
+            Tool(
+                name="validate_playbook",
+                description="Validate/check/lint Ansible playbook syntax using ansible-playbook --syntax-check. Use this when user asks to 'validate playbook', 'check playbook syntax', 'lint playbook', 'verify playbook', or wants to ensure a playbook is syntactically correct before running it.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "playbook": {
+                            "type": "string",
+                            "description": "Playbook filename or full path",
+                        },
+                        "workspace": {
+                            "type": "string",
+                            "description": "Workspace directory (if playbook is just a name)",
+                        },
+                        "inventory": {
+                            "type": "string",
+                            "description": "Inventory file/path for validation",
+                        },
+                    },
+                    "required": ["playbook"],
+                },
+            ),
+            Tool(
+                name="ansible_playbook",
+                description="Execute/run an Ansible playbook locally for development and testing. Use this when user asks to 'run playbook locally', 'execute playbook', 'test playbook', 'dry-run playbook', or wants to run a playbook in their dev environment before pushing to AWX. Supports check mode (dry-run), extra vars, tags, and host limits.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "playbook": {
+                            "type": "string",
+                            "description": "Playbook filename or full path",
+                        },
+                        "workspace": {
+                            "type": "string",
+                            "description": "Workspace directory",
+                        },
+                        "inventory": {
+                            "type": "string",
+                            "description": "Inventory file/string (default: localhost)",
+                        },
+                        "extra_vars": {
+                            "type": "object",
+                            "description": "Extra variables dict to pass to playbook",
+                        },
+                        "limit": {
+                            "type": "string",
+                            "description": "Host limit pattern",
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Ansible tags to run",
+                        },
+                        "skip_tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Tags to skip",
+                        },
+                        "check_mode": {
+                            "type": "boolean",
+                            "description": "Dry-run mode (--check), default: false",
+                        },
+                        "verbose": {
+                            "type": "number",
+                            "description": "Verbosity level 0-4 (default: 0)",
+                        },
+                    },
+                    "required": ["playbook"],
+                },
+            ),
+            Tool(
+                name="ansible_task",
+                description="Run an ad-hoc Ansible task/module locally. Use this when user asks to 'run ansible module', 'execute ad-hoc task', 'ping hosts', 'run shell command with ansible', 'test ansible module', or wants to run a single Ansible module without a playbook. Defaults to connection=local for localhost.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "module": {
+                            "type": "string",
+                            "description": "Ansible module name (e.g., 'ping', 'shell', 'copy', 'debug')",
+                        },
+                        "args": {
+                            "type": "string",
+                            "description": "Module arguments string (e.g., 'msg=hello' for debug)",
+                        },
+                        "hosts": {
+                            "type": "string",
+                            "description": "Host pattern (default: localhost)",
+                        },
+                        "inventory": {
+                            "type": "string",
+                            "description": "Inventory file/string",
+                        },
+                        "extra_vars": {
+                            "type": "object",
+                            "description": "Extra variables",
+                        },
+                        "connection": {
+                            "type": "string",
+                            "description": "Connection type (default: local)",
+                        },
+                        "become": {
+                            "type": "boolean",
+                            "description": "Use privilege escalation (sudo)",
+                        },
+                    },
+                    "required": ["module"],
+                },
+            ),
+            Tool(
+                name="ansible_role",
+                description="Execute/run an Ansible role locally by generating a temporary playbook. Use this when user asks to 'run a role', 'execute role', 'test role locally', or wants to apply a specific role from their project without writing a full playbook.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "role": {"type": "string", "description": "Role name or path"},
+                        "hosts": {
+                            "type": "string",
+                            "description": "Target hosts (default: localhost)",
+                        },
+                        "workspace": {
+                            "type": "string",
+                            "description": "Workspace directory containing roles/",
+                        },
+                        "inventory": {
+                            "type": "string",
+                            "description": "Inventory file/string",
+                        },
+                        "extra_vars": {
+                            "type": "object",
+                            "description": "Extra variables to pass to role",
+                        },
+                        "connection": {
+                            "type": "string",
+                            "description": "Connection type (default: local)",
+                        },
+                    },
+                    "required": ["role"],
+                },
+            ),
+            Tool(
+                name="create_role_structure",
+                description="Scaffold/generate/create an Ansible role directory structure with standard subdirectories (tasks, handlers, templates, files, vars, defaults, meta). Use this when user asks to 'create a role', 'scaffold a role', 'generate role skeleton', 'init role structure', or wants to set up a new role from scratch.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Role name"},
+                        "workspace": {
+                            "type": "string",
+                            "description": "Workspace where roles/ directory lives",
+                        },
+                        "include_dirs": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Subdirectories to include (default: all standard dirs)",
+                        },
+                    },
+                    "required": ["name"],
+                },
+            ),
+            Tool(
+                name="list_playbooks",
+                description="List/show/display all Ansible playbooks in the workspace or project directory. Use this when user asks to 'list playbooks', 'show my playbooks', 'what playbooks exist', 'find playbooks'.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "workspace": {
+                            "type": "string",
+                            "description": "Workspace directory to scan (default: ~/.awx-mcp/playbooks)",
+                        },
+                    },
+                },
+            ),
+            Tool(
+                name="list_roles",
+                description="List/show/display all Ansible roles in the workspace. Use this when user asks to 'list roles', 'show my roles', 'what roles exist'.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "workspace": {
+                            "type": "string",
+                            "description": "Workspace directory (default: ~/.awx-mcp/playbooks)",
+                        },
+                    },
+                },
+            ),
+            Tool(
+                name="ansible_inventory",
+                description="List/show Ansible inventory hosts and groups using ansible-inventory. Use this when user asks to 'list inventory hosts', 'show inventory groups', 'display local inventory', 'what hosts are in my inventory file'.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "inventory": {
+                            "type": "string",
+                            "description": "Inventory file, path, or host list (default: localhost)",
+                        },
+                        "workspace": {
+                            "type": "string",
+                            "description": "Working directory",
+                        },
+                    },
+                },
+            ),
+            # ── Project Registry Tools ──
+            Tool(
+                name="register_project",
+                description="Register/add a local Ansible project directory for easy reuse. Use this when user asks to 'register project', 'add project', 'set up project', 'configure my ansible project'. Auto-detects git remote URL, inventory, and default playbook.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Project alias name"},
+                        "path": {
+                            "type": "string",
+                            "description": "Absolute path to project root directory",
+                        },
+                        "scm_url": {
+                            "type": "string",
+                            "description": "Git remote URL (auto-detected if not provided)",
+                        },
+                        "scm_branch": {
+                            "type": "string",
+                            "description": "Git branch (default: main)",
+                        },
+                        "inventory": {
+                            "type": "string",
+                            "description": "Default inventory file relative to project root",
+                        },
+                        "default_playbook": {
+                            "type": "string",
+                            "description": "Default playbook filename",
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "Project description",
+                        },
+                        "set_default": {
+                            "type": "boolean",
+                            "description": "Set as the default project",
+                        },
+                    },
+                    "required": ["name", "path"],
+                },
+            ),
+            Tool(
+                name="unregister_project",
+                description="Remove/unregister a local Ansible project from the registry. Use when user asks to 'remove project', 'unregister project', 'delete project registration'.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Project alias name to remove",
+                        },
+                    },
+                    "required": ["name"],
+                },
+            ),
+            Tool(
+                name="list_registered_projects",
+                description="List/show all registered local Ansible projects and the default. Use this when user asks to 'list my projects', 'show registered projects', 'what projects are configured'.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
+                },
+            ),
+            Tool(
+                name="project_playbooks",
+                description="Discover/find/list playbooks and roles under a registered project root. Use this when user asks to 'show project playbooks', 'find playbooks in project', 'discover playbooks', 'what playbooks does project have', 'list project roles'.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "project_name": {
+                            "type": "string",
+                            "description": "Registered project name (uses default if not specified)",
+                        },
+                        "project_path": {
+                            "type": "string",
+                            "description": "Direct path to scan (overrides project_name)",
+                        },
+                    },
+                },
+            ),
+            Tool(
+                name="project_run_playbook",
+                description="Run a playbook using a registered project's inventory and environment. Use this when user asks to 'run project playbook', 'execute playbook from project', 'test project playbook locally'. Automatically uses the project's configured inventory.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "playbook": {
+                            "type": "string",
+                            "description": "Playbook filename (relative to project root)",
+                        },
+                        "project_name": {
+                            "type": "string",
+                            "description": "Registered project name (uses default if not provided)",
+                        },
+                        "extra_vars": {
+                            "type": "object",
+                            "description": "Extra variables",
+                        },
+                        "limit": {
+                            "type": "string",
+                            "description": "Host limit pattern",
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Tags to run",
+                        },
+                        "skip_tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Tags to skip",
+                        },
+                        "check_mode": {
+                            "type": "boolean",
+                            "description": "Dry-run mode (--check)",
+                        },
+                        "verbose": {
+                            "type": "number",
+                            "description": "Verbosity level 0-4",
+                        },
+                    },
+                    "required": ["playbook"],
+                },
+            ),
+            Tool(
+                name="git_push_project",
+                description="Stage, commit, and push project changes to git remote (GitHub/GitLab). Use this when user asks to 'push to git', 'commit and push', 'push playbook changes', 'push project to github', 'publish changes'. After pushing, use awx_project_update to sync AWX.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "project_name": {
+                            "type": "string",
+                            "description": "Registered project name (uses default if not provided)",
+                        },
+                        "commit_message": {
+                            "type": "string",
+                            "description": "Git commit message (default: 'Update playbooks via AWX MCP')",
+                        },
+                        "branch": {
+                            "type": "string",
+                            "description": "Branch to push to (default: from project config)",
+                        },
+                        "add_all": {
+                            "type": "boolean",
+                            "description": "Stage all changes with git add -A (default: true)",
+                        },
+                    },
+                },
+            ),
+        ]
 
     @mcp_server.call_tool()
     async def call_tool(name: str, arguments: Any) -> list[TextContent]:
         """Handle tool calls."""
         try:
             logger.info("tool_call", tool=name, arguments=arguments)
-            
+
             if name == "env_list":
                 envs = config_manager.list_environments()
                 active_name = config_manager.get_active_name()
-                
+
                 result = "Configured AWX Environments:\n\n"
                 for env in envs:
                     marker = "* " if env.name == active_name else "  "
@@ -813,24 +1709,30 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     if env.default_organization:
                         result += f"  Default Org: {env.default_organization}\n"
                     result += "\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "env_set_active":
                 env_name = arguments["env_name"]
                 config_manager.set_active(env_name)
-                return [TextContent(type="text", text=f"Active environment set to: {env_name}")]
-            
+                return [
+                    TextContent(
+                        type="text", text=f"Active environment set to: {env_name}"
+                    )
+                ]
+
             elif name == "env_get_active":
                 try:
                     env = config_manager.get_active()
-                    return [TextContent(type="text", text=f"Active environment: {env.name}")]
+                    return [
+                        TextContent(type="text", text=f"Active environment: {env.name}")
+                    ]
                 except NoActiveEnvironmentError:
                     return [TextContent(type="text", text="No active environment set")]
-            
+
             elif name == "env_test_connection":
                 env_name = arguments.get("env_name")
-                
+
                 if env_name:
                     env = config_manager.get_environment(env_name)
                     try:
@@ -843,24 +1745,32 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                             env.env_id, CredentialType.TOKEN
                         )
                         is_token = True
-                    
+
                     client = CompositeAWXClient(env, username, secret, is_token)
                 else:
                     env, client = get_active_client()
-                
+
                 async with client:
                     success = await client.test_connection()
-                
+
                 if success:
-                    return [TextContent(type="text", text=f"✓ Connection successful to {env.name}")]
+                    return [
+                        TextContent(
+                            type="text", text=f"✓ Connection successful to {env.name}"
+                        )
+                    ]
                 else:
-                    return [TextContent(type="text", text=f"✗ Connection failed to {env.name}")]
-            
+                    return [
+                        TextContent(
+                            type="text", text=f"✗ Connection failed to {env.name}"
+                        )
+                    ]
+
             # System Info
             elif name == "awx_system_info":
                 env, client = get_active_client()
                 info_type = arguments["info_type"]
-                
+
                 async with client:
                     if info_type == "config":
                         data = await client.rest_client.get_config()
@@ -886,9 +1796,9 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         result += f"First Name: {data.get('first_name', 'N/A')}\n"
                         result += f"Last Name: {data.get('last_name', 'N/A')}\n"
                         result += f"Is Superuser: {data.get('is_superuser', False)}\n"
-                    
+
                 return [TextContent(type="text", text=result)]
-            
+
             # Organizations
             elif name == "awx_organizations_list":
                 env, client = get_active_client()
@@ -898,31 +1808,31 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         page=arguments.get("page", 1),
                         page_size=arguments.get("page_size", 25),
                     )
-                
+
                 result = f"Organizations ({len(orgs)}):\n\n"
                 for org in orgs:
                     result += f"ID: {org['id']} - {org['name']}\n"
-                    if org.get('description'):
+                    if org.get("description"):
                         result += f"  Description: {org['description']}\n"
                     result += "\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_organization_get":
                 env, client = get_active_client()
                 org_id = arguments["org_id"]
-                
+
                 async with client:
                     org = await client.rest_client.get_organization(org_id)
-                
+
                 result = f"Organization {org_id}:\n\n"
                 result += f"Name: {org['name']}\n"
-                if org.get('description'):
+                if org.get("description"):
                     result += f"Description: {org['description']}\n"
                 result += f"ID: {org['id']}\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             # Credentials
             elif name == "awx_credentials_list":
                 env, client = get_active_client()
@@ -932,17 +1842,17 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         page=arguments.get("page", 1),
                         page_size=arguments.get("page_size", 25),
                     )
-                
+
                 result = f"Credentials ({len(creds)}):\n\n"
                 for cred in creds:
                     result += f"ID: {cred['id']} - {cred['name']}\n"
-                    if cred.get('description'):
+                    if cred.get("description"):
                         result += f"  Description: {cred['description']}\n"
                     result += f"  Type: {cred.get('credential_type')}\n"
                     result += "\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_credential_types_list":
                 env, client = get_active_client()
                 async with client:
@@ -950,16 +1860,16 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         page=arguments.get("page", 1),
                         page_size=arguments.get("page_size", 25),
                     )
-                
+
                 result = f"Credential Types ({len(types)}):\n\n"
                 for ctype in types:
                     result += f"ID: {ctype['id']} - {ctype['name']}\n"
-                    if ctype.get('description'):
+                    if ctype.get("description"):
                         result += f"  Description: {ctype['description']}\n"
                     result += "\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_credential_create":
                 env, client = get_active_client()
                 async with client:
@@ -970,22 +1880,337 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         inputs=arguments["inputs"],
                         description=arguments.get("description", ""),
                     )
-                
-                result = f"✓ Credential created successfully\n\n"
+
+                result = "✓ Credential created successfully\n\n"
                 result += f"ID: {cred['id']}\n"
                 result += f"Name: {cred['name']}\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_credential_delete":
                 env, client = get_active_client()
                 cred_id = arguments["credential_id"]
-                
+
                 async with client:
                     await client.rest_client.delete_credential(cred_id)
-                
-                return [TextContent(type="text", text=f"Credential {cred_id} deleted successfully")]
-            
+
+                return [
+                    TextContent(
+                        type="text", text=f"Credential {cred_id} deleted successfully"
+                    )
+                ]
+
+            # Notification Templates
+            elif name == "awx_notification_templates_list":
+                env, client = get_active_client()
+                async with client:
+                    templates = await client.rest_client.list_notification_templates(
+                        name_filter=arguments.get("filter"),
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 25),
+                    )
+
+                result = f"Notification Templates ({len(templates)}):\n\n"
+                for tmpl in templates:
+                    result += f"ID: {tmpl['id']} - {tmpl['name']}\n"
+                    result += f"  Type: {tmpl.get('notification_type', 'unknown')}\n"
+                    if tmpl.get("description"):
+                        result += f"  Description: {tmpl['description']}\n"
+                    if tmpl.get("organization"):
+                        org_name = (
+                            tmpl.get("summary_fields", {})
+                            .get("organization", {})
+                            .get("name")
+                        )
+                        if org_name:
+                            result += f"  Organization: {org_name}\n"
+                    config = tmpl.get("notification_configuration", {})
+                    if config.get("channels"):
+                        result += f"  Channels: {', '.join(config['channels'])}\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_notification_template_get":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    tmpl = await client.rest_client.get_notification_template(
+                        template_id
+                    )
+
+                result = f"Notification Template {template_id}:\n\n"
+                result += f"Name: {tmpl['name']}\n"
+                result += f"Type: {tmpl.get('notification_type', 'unknown')}\n"
+                if tmpl.get("description"):
+                    result += f"Description: {tmpl['description']}\n"
+                org_name = (
+                    tmpl.get("summary_fields", {}).get("organization", {}).get("name")
+                )
+                if org_name:
+                    result += f"Organization: {org_name}\n"
+
+                config = tmpl.get("notification_configuration", {})
+                result += "\nConfiguration:\n"
+                for key, value in config.items():
+                    if key == "token":
+                        result += f"  {key}: (encrypted)\n"
+                    else:
+                        result += f"  {key}: {value}\n"
+
+                messages = tmpl.get("messages", {})
+                if messages:
+                    result += "\nCustom Messages:\n"
+                    for event, msg in messages.items():
+                        if event == "workflow_approval":
+                            continue
+                        if isinstance(msg, dict) and msg.get("message"):
+                            result += f"  {event}: {msg['message']}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_notification_template_test":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    notif = await client.rest_client.test_notification_template(
+                        template_id
+                    )
+
+                result = "Test notification sent\n\n"
+                result += f"Notification ID: {notif.get('id')}\n"
+                result += f"Status: {notif.get('status')}\n"
+                result += f"Type: {notif.get('notification_type')}\n"
+                result += f"Recipients: {notif.get('recipients')}\n"
+                result += f"Subject: {notif.get('subject')}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_notifications_list":
+                env, client = get_active_client()
+
+                async with client:
+                    notifications = await client.rest_client.list_notifications(
+                        notification_template_id=arguments.get(
+                            "notification_template_id"
+                        ),
+                        status=arguments.get("status"),
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 25),
+                    )
+
+                result = f"Notifications ({len(notifications)}):\n\n"
+                for n in notifications:
+                    tmpl_name = (
+                        n.get("summary_fields", {})
+                        .get("notification_template", {})
+                        .get("name", "Unknown")
+                    )
+                    result += f"ID: {n['id']} - {tmpl_name}\n"
+                    result += f"  Status: {n.get('status')}\n"
+                    result += f"  Type: {n.get('notification_type')}\n"
+                    result += f"  Created: {n.get('created')}\n"
+                    result += f"  Recipients: {n.get('recipients')}\n"
+                    if n.get("subject"):
+                        result += f"  Subject: {n['subject'][:100]}\n"
+                    if n.get("error"):
+                        result += f"  Error: {n['error']}\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_notification_template_update":
+                env, client = get_active_client()
+                template_id = arguments.pop("template_id")
+
+                async with client:
+                    tmpl = await client.rest_client.update_notification_template(
+                        template_id,
+                        name=arguments.get("name"),
+                        description=arguments.get("description"),
+                        notification_configuration=arguments.get(
+                            "notification_configuration"
+                        ),
+                        messages=arguments.get("messages"),
+                    )
+
+                result = f"Notification template {template_id} updated\n\n"
+                result += f"Name: {tmpl['name']}\n"
+                result += f"Type: {tmpl.get('notification_type')}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_notification_template_delete":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    await client.rest_client.delete_notification_template(template_id)
+
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Notification template {template_id} deleted successfully",
+                    )
+                ]
+
+            elif name == "awx_notification_template_create":
+                env, client = get_active_client()
+                async with client:
+                    tmpl = await client.rest_client.create_notification_template(
+                        name=arguments["name"],
+                        organization=arguments["organization"],
+                        notification_type=arguments["notification_type"],
+                        notification_configuration=arguments.get(
+                            "notification_configuration"
+                        ),
+                        description=arguments.get("description", ""),
+                        messages=arguments.get("messages"),
+                    )
+
+                result = "Notification template created successfully\n\n"
+                result += f"ID: {tmpl['id']}\n"
+                result += f"Name: {tmpl['name']}\n"
+                result += f"Type: {tmpl.get('notification_type')}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_job_template_notifications_list":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    started = await client.rest_client.list_job_template_notification_templates(
+                        template_id, "started"
+                    )
+                    success = await client.rest_client.list_job_template_notification_templates(
+                        template_id, "success"
+                    )
+                    error = await client.rest_client.list_job_template_notification_templates(
+                        template_id, "error"
+                    )
+
+                result = f"Job Template {template_id} Notifications:\n\n"
+                for event_name, notifs in [
+                    ("Started", started),
+                    ("Success", success),
+                    ("Error", error),
+                ]:
+                    result += f"{event_name} ({len(notifs)}):\n"
+                    if notifs:
+                        for n in notifs:
+                            result += f"  ID: {n['id']} - {n['name']} ({n.get('notification_type', 'unknown')})\n"
+                    else:
+                        result += "  (none)\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_job_template_notification_associate":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+                notification_id = arguments["notification_template_id"]
+                event = arguments["event"]
+
+                async with client:
+                    await client.rest_client.associate_job_template_notification(
+                        template_id, notification_id, event
+                    )
+
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Notification template {notification_id} associated with job template {template_id} for '{event}' event",
+                    )
+                ]
+
+            elif name == "awx_job_template_notification_disassociate":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+                notification_id = arguments["notification_template_id"]
+                event = arguments["event"]
+
+                async with client:
+                    await client.rest_client.disassociate_job_template_notification(
+                        template_id, notification_id, event
+                    )
+
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Notification template {notification_id} disassociated from job template {template_id} for '{event}' event",
+                    )
+                ]
+
+            elif name == "awx_workflow_template_notifications_list":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    started = await client.rest_client.list_workflow_template_notification_templates(
+                        template_id, "started"
+                    )
+                    success = await client.rest_client.list_workflow_template_notification_templates(
+                        template_id, "success"
+                    )
+                    error = await client.rest_client.list_workflow_template_notification_templates(
+                        template_id, "error"
+                    )
+
+                result = f"Workflow Job Template {template_id} Notifications:\n\n"
+                for event_name, notifs in [
+                    ("Started", started),
+                    ("Success", success),
+                    ("Error", error),
+                ]:
+                    result += f"{event_name} ({len(notifs)}):\n"
+                    if notifs:
+                        for n in notifs:
+                            result += f"  ID: {n['id']} - {n['name']} ({n.get('notification_type', 'unknown')})\n"
+                    else:
+                        result += "  (none)\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_template_notification_associate":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+                notification_id = arguments["notification_template_id"]
+                event = arguments["event"]
+
+                async with client:
+                    await client.rest_client.associate_workflow_template_notification(
+                        template_id, notification_id, event
+                    )
+
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Notification template {notification_id} associated with workflow template {template_id} for '{event}' event",
+                    )
+                ]
+
+            elif name == "awx_workflow_template_notification_disassociate":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+                notification_id = arguments["notification_template_id"]
+                event = arguments["event"]
+
+                async with client:
+                    await client.rest_client.disassociate_workflow_template_notification(
+                        template_id, notification_id, event
+                    )
+
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Notification template {notification_id} disassociated from workflow template {template_id} for '{event}' event",
+                    )
+                ]
+
             # Templates CRUD
             elif name == "awx_template_create":
                 env, client = get_active_client()
@@ -1000,23 +2225,28 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         extra_vars=arguments.get("extra_vars"),
                         limit=arguments.get("limit"),
                     )
-                
-                result = f"✓ Job template created successfully\n\n"
+
+                result = "✓ Job template created successfully\n\n"
                 result += f"ID: {template.id}\n"
                 result += f"Name: {template.name}\n"
                 result += f"Playbook: {template.playbook}\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_template_delete":
                 env, client = get_active_client()
                 template_id = arguments["template_id"]
-                
+
                 async with client:
                     await client.rest_client.delete_job_template(template_id)
-                
-                return [TextContent(type="text", text=f"Job template {template_id} deleted successfully")]
-            
+
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Job template {template_id} deleted successfully",
+                    )
+                ]
+
             # Projects CRUD
             elif name == "awx_project_create":
                 env, client = get_active_client()
@@ -1029,24 +2259,28 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         scm_branch=arguments.get("scm_branch", "main"),
                         description=arguments.get("description", ""),
                     )
-                
-                result = f"✓ Project created successfully\n\n"
+
+                result = "✓ Project created successfully\n\n"
                 result += f"ID: {project.id}\n"
                 result += f"Name: {project.name}\n"
                 if project.scm_url:
                     result += f"SCM: {project.scm_url}\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_project_delete":
                 env, client = get_active_client()
                 project_id = arguments["project_id"]
-                
+
                 async with client:
                     await client.rest_client.delete_project(project_id)
-                
-                return [TextContent(type="text", text=f"Project {project_id} deleted successfully")]
-            
+
+                return [
+                    TextContent(
+                        type="text", text=f"Project {project_id} deleted successfully"
+                    )
+                ]
+
             # Inventories CRUD
             elif name == "awx_inventory_create":
                 env, client = get_active_client()
@@ -1057,47 +2291,52 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         description=arguments.get("description", ""),
                         variables=arguments.get("variables"),
                     )
-                
-                result = f"✓ Inventory created successfully\n\n"
+
+                result = "✓ Inventory created successfully\n\n"
                 result += f"ID: {inventory.id}\n"
                 result += f"Name: {inventory.name}\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_inventory_delete":
                 env, client = get_active_client()
                 inventory_id = arguments["inventory_id"]
-                
+
                 async with client:
                     await client.rest_client.delete_inventory(inventory_id)
-                
-                return [TextContent(type="text", text=f"Inventory {inventory_id} deleted successfully")]
-            
+
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Inventory {inventory_id} deleted successfully",
+                    )
+                ]
+
             # Inventory Groups
             elif name == "awx_inventory_groups_list":
                 env, client = get_active_client()
                 inventory_id = arguments["inventory_id"]
-                
+
                 async with client:
                     groups = await client.rest_client.list_inventory_groups(
                         inventory_id=inventory_id,
                         page=arguments.get("page", 1),
                         page_size=arguments.get("page_size", 25),
                     )
-                
+
                 result = f"Inventory {inventory_id} Groups ({len(groups)}):\n\n"
                 for group in groups:
                     result += f"ID: {group['id']} - {group['name']}\n"
-                    if group.get('description'):
+                    if group.get("description"):
                         result += f"  Description: {group['description']}\n"
                     result += "\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_inventory_group_create":
                 env, client = get_active_client()
                 inventory_id = arguments["inventory_id"]
-                
+
                 async with client:
                     group = await client.rest_client.create_inventory_group(
                         inventory_id=inventory_id,
@@ -1105,47 +2344,51 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         description=arguments.get("description", ""),
                         variables=arguments.get("variables"),
                     )
-                
-                result = f"✓ Group created successfully\n\n"
+
+                result = "✓ Group created successfully\n\n"
                 result += f"ID: {group['id']}\n"
                 result += f"Name: {group['name']}\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_inventory_group_delete":
                 env, client = get_active_client()
                 group_id = arguments["group_id"]
-                
+
                 async with client:
                     await client.rest_client.delete_inventory_group(group_id)
-                
-                return [TextContent(type="text", text=f"Group {group_id} deleted successfully")]
-            
+
+                return [
+                    TextContent(
+                        type="text", text=f"Group {group_id} deleted successfully"
+                    )
+                ]
+
             # Inventory Hosts
             elif name == "awx_inventory_hosts_list":
                 env, client = get_active_client()
                 inventory_id = arguments["inventory_id"]
-                
+
                 async with client:
                     hosts = await client.rest_client.list_inventory_hosts(
                         inventory_id=inventory_id,
                         page=arguments.get("page", 1),
                         page_size=arguments.get("page_size", 25),
                     )
-                
+
                 result = f"Inventory {inventory_id} Hosts ({len(hosts)}):\n\n"
                 for host in hosts:
                     result += f"ID: {host['id']} - {host['name']}\n"
-                    if host.get('description'):
+                    if host.get("description"):
                         result += f"  Description: {host['description']}\n"
                     result += "\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_inventory_host_create":
                 env, client = get_active_client()
                 inventory_id = arguments["inventory_id"]
-                
+
                 async with client:
                     host = await client.rest_client.create_inventory_host(
                         inventory_id=inventory_id,
@@ -1153,22 +2396,26 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         description=arguments.get("description", ""),
                         variables=arguments.get("variables"),
                     )
-                
-                result = f"✓ Host created successfully\n\n"
+
+                result = "✓ Host created successfully\n\n"
                 result += f"ID: {host['id']}\n"
                 result += f"Name: {host['name']}\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_inventory_host_delete":
                 env, client = get_active_client()
                 host_id = arguments["host_id"]
-                
+
                 async with client:
                     await client.rest_client.delete_inventory_host(host_id)
-                
-                return [TextContent(type="text", text=f"Host {host_id} deleted successfully")]
-            
+
+                return [
+                    TextContent(
+                        type="text", text=f"Host {host_id} deleted successfully"
+                    )
+                ]
+
             elif name == "awx_templates_list":
                 env, client = get_active_client()
                 async with client:
@@ -1177,7 +2424,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         page=arguments.get("page", 1),
                         page_size=arguments.get("page_size", 25),
                     )
-                
+
                 result = f"Job Templates ({len(templates)}):\n\n"
                 for tmpl in templates:
                     result += f"ID: {tmpl.id} - {tmpl.name}\n"
@@ -1185,9 +2432,9 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         result += f"  Description: {tmpl.description}\n"
                     result += f"  Playbook: {tmpl.playbook}\n"
                     result += "\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_projects_list":
                 env, client = get_active_client()
                 async with client:
@@ -1196,7 +2443,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         page=arguments.get("page", 1),
                         page_size=arguments.get("page_size", 25),
                     )
-                
+
                 result = f"Projects ({len(projects)}):\n\n"
                 for proj in projects:
                     result += f"ID: {proj.id} - {proj.name}\n"
@@ -1208,9 +2455,9 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         result += f"  Branch: {proj.scm_branch}\n"
                     result += f"  Status: {proj.status}\n"
                     result += "\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_inventories_list":
                 env, client = get_active_client()
                 async with client:
@@ -1219,7 +2466,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         page=arguments.get("page", 1),
                         page_size=arguments.get("page_size", 25),
                     )
-                
+
                 result = f"Inventories ({len(inventories)}):\n\n"
                 for inv in inventories:
                     result += f"ID: {inv.id} - {inv.name}\n"
@@ -1227,33 +2474,33 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         result += f"  Description: {inv.description}\n"
                     result += f"  Total Hosts: {inv.total_hosts}\n"
                     result += "\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_project_update":
                 env, client = get_active_client()
                 project_id = arguments["project_id"]
                 wait = arguments.get("wait", True)
-                
+
                 async with client:
                     result_data = await client.update_project(project_id, wait)
-                
+
                 return [
                     TextContent(
                         type="text",
                         text=f"Project {project_id} update initiated. Result: {result_data}",
                     )
                 ]
-            
+
             elif name == "awx_job_launch":
                 env, client = get_active_client()
                 template_id = arguments["template_id"]
-                
+
                 # Get template to check allowlist
                 async with client:
                     template = await client.get_job_template(template_id)
                     check_allowlist(env, template_id, template.name)
-                    
+
                     job = await client.launch_job(
                         template_id=template_id,
                         extra_vars=arguments.get("extra_vars"),
@@ -1261,7 +2508,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         tags=arguments.get("tags"),
                         skip_tags=arguments.get("skip_tags"),
                     )
-                
+
                 # Audit log
                 logger.info(
                     "job_launched",
@@ -1269,22 +2516,22 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     template=template.name,
                     job_id=job.id,
                 )
-                
-                result = f"✓ Job launched successfully\n\n"
+
+                result = "✓ Job launched successfully\n\n"
                 result += f"Job ID: {job.id}\n"
                 result += f"Name: {job.name}\n"
                 result += f"Status: {job.status.value}\n"
                 result += f"Playbook: {job.playbook}\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_job_get":
                 env, client = get_active_client()
                 job_id = arguments["job_id"]
-                
+
                 async with client:
                     job = await client.get_job(job_id)
-                
+
                 result = f"Job {job_id} Details:\n\n"
                 result += f"Name: {job.name}\n"
                 result += f"Status: {job.status.value}\n"
@@ -1295,12 +2542,12 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     result += f"Finished: {job.finished.isoformat()}\n"
                 if job.elapsed:
                     result += f"Elapsed: {job.elapsed}s\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_jobs_list":
                 env, client = get_active_client()
-                
+
                 async with client:
                     jobs = await client.list_jobs(
                         status=arguments.get("status"),
@@ -1308,7 +2555,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         page=arguments.get("page", 1),
                         page_size=arguments.get("page_size", 25),
                     )
-                
+
                 result = f"Recent Jobs ({len(jobs)}):\n\n"
                 for job in jobs:
                     result += f"ID: {job.id} - {job.name}\n"
@@ -1317,44 +2564,50 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     if job.started:
                         result += f"  Started: {job.started.isoformat()}\n"
                     result += "\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_job_cancel":
                 env, client = get_active_client()
                 job_id = arguments["job_id"]
-                
+
                 async with client:
                     result_data = await client.cancel_job(job_id)
-                
-                return [TextContent(type="text", text=f"Job {job_id} cancellation requested")]
-            
+
+                return [
+                    TextContent(
+                        type="text", text=f"Job {job_id} cancellation requested"
+                    )
+                ]
+
             elif name == "awx_job_delete":
                 env, client = get_active_client()
                 job_id = arguments["job_id"]
-                
+
                 async with client:
                     await client.delete_job(job_id)
-                
-                return [TextContent(type="text", text=f"Job {job_id} deleted successfully")]
-            
+
+                return [
+                    TextContent(type="text", text=f"Job {job_id} deleted successfully")
+                ]
+
             elif name == "awx_job_stdout":
                 env, client = get_active_client()
                 job_id = arguments["job_id"]
                 format = arguments.get("format", "txt")
                 tail_lines = arguments.get("tail_lines")
-                
+
                 async with client:
                     stdout = await client.get_job_stdout(job_id, format, tail_lines)
-                
+
                 result = f"Job {job_id} Output:\n\n{stdout}"
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_job_events":
                 env, client = get_active_client()
                 job_id = arguments["job_id"]
                 failed_only = arguments.get("failed_only", False)
-                
+
                 async with client:
                     events = await client.get_job_events(
                         job_id=job_id,
@@ -1362,7 +2615,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         page=arguments.get("page", 1),
                         page_size=arguments.get("page_size", 100),
                     )
-                
+
                 result = f"Job {job_id} Events ({len(events)}):\n\n"
                 for event in events:
                     if event.task:
@@ -1374,44 +2627,417 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     if event.stdout:
                         result += f"  Output: {event.stdout[:200]}...\n"
                     result += "\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "awx_job_failure_summary":
                 env, client = get_active_client()
                 job_id = arguments["job_id"]
-                
+
                 async with client:
                     # Get job events and stdout
                     events = await client.get_job_events(job_id, failed_only=True)
                     stdout = await client.get_job_stdout(job_id, "txt", 500)
-                
+
                 # Analyze failure
                 analysis = analyze_job_failure(job_id, events, stdout)
-                
+
                 result = f"Job {job_id} Failure Analysis:\n\n"
                 result += f"Category: {analysis.category.value}\n"
                 result += f"Failed Events: {analysis.failed_events_count}\n\n"
-                
+
                 if analysis.task_name:
                     result += f"Failed Task: {analysis.task_name}\n"
                 if analysis.play_name:
                     result += f"Play: {analysis.play_name}\n"
                 if analysis.host:
                     result += f"Host: {analysis.host}\n"
-                
+
                 if analysis.error_message:
                     result += f"\nError Message:\n{analysis.error_message}\n"
-                
+
                 if analysis.suggested_fixes:
                     result += "\n🔧 Suggested Fixes:\n\n"
                     for i, fix in enumerate(analysis.suggested_fixes, 1):
                         result += f"{i}. {fix}\n"
-                
+
                 return [TextContent(type="text", text=result)]
-            
+
+            # ── Workflow Job Template Handlers ──
+
+            elif name == "awx_workflow_templates_list":
+                env, client = get_active_client()
+                async with client:
+                    templates = await client.list_workflow_job_templates(
+                        name_filter=arguments.get("filter"),
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 25),
+                    )
+
+                result = f"Workflow Job Templates ({len(templates)}):\n\n"
+                for tmpl in templates:
+                    result += f"ID: {tmpl.id} - {tmpl.name}\n"
+                    if tmpl.description:
+                        result += f"  Description: {tmpl.description}\n"
+                    if tmpl.status:
+                        result += f"  Status: {tmpl.status}\n"
+                    if tmpl.last_job_run:
+                        result += f"  Last Run: {tmpl.last_job_run.isoformat()}\n"
+                    if tmpl.next_job_run:
+                        result += f"  Next Run: {tmpl.next_job_run.isoformat()}\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_template_get":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    tmpl = await client.get_workflow_job_template(template_id)
+
+                result = f"Workflow Job Template {template_id}:\n\n"
+                result += f"Name: {tmpl.name}\n"
+                if tmpl.description:
+                    result += f"Description: {tmpl.description}\n"
+                if tmpl.organization:
+                    result += f"Organization: {tmpl.organization}\n"
+                if tmpl.inventory:
+                    result += f"Inventory: {tmpl.inventory}\n"
+                if tmpl.limit:
+                    result += f"Limit: {tmpl.limit}\n"
+                if tmpl.status:
+                    result += f"Status: {tmpl.status}\n"
+                result += f"Survey Enabled: {tmpl.survey_enabled}\n"
+                result += f"Allow Simultaneous: {tmpl.allow_simultaneous}\n"
+                if tmpl.last_job_run:
+                    result += f"Last Run: {tmpl.last_job_run.isoformat()}\n"
+                if tmpl.next_job_run:
+                    result += f"Next Run: {tmpl.next_job_run.isoformat()}\n"
+                result += "\nLaunch Options:\n"
+                result += f"  Ask Variables: {tmpl.ask_variables_on_launch}\n"
+                result += f"  Ask Inventory: {tmpl.ask_inventory_on_launch}\n"
+                result += f"  Ask Limit: {tmpl.ask_limit_on_launch}\n"
+                result += f"  Ask Tags: {tmpl.ask_tags_on_launch}\n"
+                result += f"  Ask Skip Tags: {tmpl.ask_skip_tags_on_launch}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_job_launch":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    tmpl = await client.get_workflow_job_template(template_id)
+                    check_allowlist(env, template_id, tmpl.name)
+
+                    wf_job = await client.launch_workflow_job(
+                        template_id=template_id,
+                        extra_vars=arguments.get("extra_vars"),
+                        limit=arguments.get("limit"),
+                        tags=arguments.get("tags"),
+                        skip_tags=arguments.get("skip_tags"),
+                    )
+
+                logger.info(
+                    "workflow_job_launched",
+                    environment=env.name,
+                    template=tmpl.name,
+                    job_id=wf_job.id,
+                )
+
+                result = "✓ Workflow job launched successfully\n\n"
+                result += f"Workflow Job ID: {wf_job.id}\n"
+                result += f"Name: {wf_job.name}\n"
+                result += f"Status: {wf_job.status.value}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_job_get":
+                env, client = get_active_client()
+                job_id = arguments["job_id"]
+
+                async with client:
+                    wf_job = await client.get_workflow_job(job_id)
+
+                result = f"Workflow Job {job_id} Details:\n\n"
+                result += f"Name: {wf_job.name}\n"
+                result += f"Status: {wf_job.status.value}\n"
+                result += f"Failed: {wf_job.failed}\n"
+                if wf_job.workflow_job_template:
+                    result += f"Template ID: {wf_job.workflow_job_template}\n"
+                if wf_job.launch_type:
+                    result += f"Launch Type: {wf_job.launch_type}\n"
+                if wf_job.started:
+                    result += f"Started: {wf_job.started.isoformat()}\n"
+                if wf_job.finished:
+                    result += f"Finished: {wf_job.finished.isoformat()}\n"
+                if wf_job.elapsed:
+                    result += f"Elapsed: {wf_job.elapsed}s\n"
+                if wf_job.limit:
+                    result += f"Limit: {wf_job.limit}\n"
+                if wf_job.job_explanation:
+                    result += f"\nExplanation: {wf_job.job_explanation}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_jobs_list":
+                env, client = get_active_client()
+
+                async with client:
+                    wf_jobs = await client.list_workflow_jobs(
+                        status=arguments.get("status"),
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 25),
+                        workflow_template_id=arguments.get("workflow_template_id"),
+                    )
+
+                result = f"Workflow Jobs ({len(wf_jobs)}):\n\n"
+                for wf_job in wf_jobs:
+                    result += f"ID: {wf_job.id} - {wf_job.name}\n"
+                    result += f"  Status: {wf_job.status.value}\n"
+                    if wf_job.launch_type:
+                        result += f"  Launch Type: {wf_job.launch_type}\n"
+                    if wf_job.started:
+                        result += f"  Started: {wf_job.started.isoformat()}\n"
+                    if wf_job.finished:
+                        result += f"  Finished: {wf_job.finished.isoformat()}\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_job_cancel":
+                env, client = get_active_client()
+                job_id = arguments["job_id"]
+
+                async with client:
+                    await client.cancel_workflow_job(job_id)
+
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Workflow job {job_id} cancellation requested",
+                    )
+                ]
+
+            elif name == "awx_workflow_job_nodes":
+                env, client = get_active_client()
+                job_id = arguments["job_id"]
+
+                async with client:
+                    nodes = await client.get_workflow_job_nodes(
+                        job_id=job_id,
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 100),
+                    )
+
+                result = f"Workflow Job {job_id} Nodes ({len(nodes)}):\n\n"
+                for node in nodes:
+                    # Extract names from summary_fields
+                    sf = node.summary_fields
+                    template_name = sf.get("unified_job_template", {}).get(
+                        "name", "Unknown"
+                    )
+                    job_type = sf.get("unified_job_template", {}).get(
+                        "unified_job_type", "unknown"
+                    )
+                    job_info = sf.get("job", {})
+                    job_status = job_info.get("status", "unknown")
+                    job_failed = job_info.get("failed", False)
+                    job_elapsed = job_info.get("elapsed")
+                    child_job_id = node.job
+
+                    status_icon = (
+                        "✗"
+                        if job_failed
+                        else ("✓" if job_status == "successful" else "●")
+                    )
+                    result += f"{status_icon} Node: {template_name} ({job_type})\n"
+                    if child_job_id:
+                        result += f"  Job ID: {child_job_id} | Status: {job_status}"
+                        if job_elapsed is not None:
+                            result += f" | Elapsed: {job_elapsed}s"
+                        result += "\n"
+                    if node.do_not_run:
+                        result += "  (skipped)\n"
+                    connections = []
+                    if node.success_nodes:
+                        connections.append(f"success -> {node.success_nodes}")
+                    if node.failure_nodes:
+                        connections.append(f"failure -> {node.failure_nodes}")
+                    if node.always_nodes:
+                        connections.append(f"always -> {node.always_nodes}")
+                    if connections:
+                        result += f"  Connections: {', '.join(connections)}\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_job_delete":
+                env, client = get_active_client()
+                job_id = arguments["job_id"]
+
+                async with client:
+                    await client.rest_client.delete_workflow_job(job_id)
+
+                return [
+                    TextContent(
+                        type="text", text=f"Workflow job {job_id} deleted successfully"
+                    )
+                ]
+
+            elif name == "awx_workflow_job_relaunch":
+                env, client = get_active_client()
+                job_id = arguments["job_id"]
+
+                async with client:
+                    wf_job = await client.rest_client.relaunch_workflow_job(job_id)
+
+                result = "Workflow job relaunched successfully\n\n"
+                result += f"New Workflow Job ID: {wf_job.id}\n"
+                result += f"Name: {wf_job.name}\n"
+                result += f"Status: {wf_job.status.value}\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_template_nodes":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    nodes = await client.rest_client.get_workflow_job_template_nodes(
+                        template_id,
+                        page=arguments.get("page", 1),
+                        page_size=arguments.get("page_size", 100),
+                    )
+
+                result = f"Workflow Template {template_id} Nodes ({len(nodes)}):\n\n"
+                for node in nodes:
+                    sf = node.get("summary_fields", {})
+                    ujt = sf.get("unified_job_template", {})
+                    template_name = ujt.get("name", "Unknown")
+                    job_type = ujt.get("unified_job_type", "unknown")
+
+                    result += f"Node {node['id']}: {template_name} ({job_type})\n"
+                    connections = []
+                    if node.get("success_nodes"):
+                        connections.append(f"success -> {node['success_nodes']}")
+                    if node.get("failure_nodes"):
+                        connections.append(f"failure -> {node['failure_nodes']}")
+                    if node.get("always_nodes"):
+                        connections.append(f"always -> {node['always_nodes']}")
+                    if connections:
+                        result += f"  Connections: {', '.join(connections)}\n"
+                    if node.get("all_parents_must_converge"):
+                        result += "  All parents must converge: True\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_template_survey":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    survey = await client.rest_client.get_workflow_job_template_survey(
+                        template_id
+                    )
+
+                spec = survey.get("spec", [])
+                if not spec:
+                    result = f"Workflow Template {template_id} has no survey questions configured.\n"
+                else:
+                    result = f"Workflow Template {template_id} Survey ({len(spec)} questions):\n\n"
+                    if survey.get("name"):
+                        result += f"Name: {survey['name']}\n"
+                    if survey.get("description"):
+                        result += f"Description: {survey['description']}\n"
+                    result += "\n"
+                    for q in spec:
+                        required = " (required)" if q.get("required") else ""
+                        result += f"Variable: {q.get('variable')}{required}\n"
+                        result += f"  Question: {q.get('question_name', '')}\n"
+                        result += f"  Type: {q.get('type', 'text')}\n"
+                        if q.get("default"):
+                            result += f"  Default: {q['default']}\n"
+                        if q.get("choices"):
+                            result += f"  Choices: {q['choices']}\n"
+                        result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_template_schedules":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    schedules = (
+                        await client.rest_client.list_workflow_job_template_schedules(
+                            template_id,
+                            page=arguments.get("page", 1),
+                            page_size=arguments.get("page_size", 25),
+                        )
+                    )
+
+                result = (
+                    f"Workflow Template {template_id} Schedules ({len(schedules)}):\n\n"
+                )
+                for s in schedules:
+                    result += f"ID: {s['id']} - {s['name']}\n"
+                    if s.get("description"):
+                        result += f"  Description: {s['description']}\n"
+                    result += f"  Enabled: {s.get('enabled', False)}\n"
+                    result += f"  RRule: {s.get('rrule', 'N/A')}\n"
+                    if s.get("next_run"):
+                        result += f"  Next Run: {s['next_run']}\n"
+                    if s.get("dtstart"):
+                        result += f"  Start: {s['dtstart']}\n"
+                    result += "\n"
+
+                return [TextContent(type="text", text=result)]
+
+            elif name == "awx_workflow_template_launch_config":
+                env, client = get_active_client()
+                template_id = arguments["template_id"]
+
+                async with client:
+                    config = await client.rest_client.get_workflow_job_template_launch_config(
+                        template_id
+                    )
+
+                result = f"Workflow Template {template_id} Launch Configuration:\n\n"
+                result += f"Can Start Without User Input: {config.get('can_start_without_user_input', False)}\n"
+                result += f"Survey Enabled: {config.get('survey_enabled', False)}\n"
+                result += f"Variables Needed: {config.get('variables_needed_to_start', [])}\n\n"
+
+                result += "Prompt Options:\n"
+                for key in [
+                    "ask_inventory_on_launch",
+                    "ask_limit_on_launch",
+                    "ask_scm_branch_on_launch",
+                    "ask_variables_on_launch",
+                    "ask_labels_on_launch",
+                    "ask_tags_on_launch",
+                    "ask_skip_tags_on_launch",
+                ]:
+                    if config.get(key):
+                        result += f"  {key}: True\n"
+
+                defaults = config.get("defaults", {})
+                if defaults:
+                    result += "\nDefaults:\n"
+                    for key, value in defaults.items():
+                        if value is not None:
+                            result += f"  {key}: {value}\n"
+
+                missing = config.get("node_templates_missing", [])
+                if missing:
+                    result += f"\nMissing Node Templates: {missing}\n"
+
+                return [TextContent(type="text", text=result)]
+
             # ── Local Ansible Development Tool Handlers ──
-            
+
             elif name == "create_playbook":
                 pb_result = playbook_manager.create_playbook(
                     name=arguments["name"],
@@ -1427,7 +3053,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                 else:
                     result = f"❌ {pb_result['message']}"
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "validate_playbook":
                 val_result = await playbook_manager.validate_playbook(
                     playbook=arguments["playbook"],
@@ -1439,12 +3065,14 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     if val_result.get("output"):
                         result += f"\n{val_result['output']}"
                 elif val_result["status"] == "invalid":
-                    result = f"❌ Playbook has syntax errors: {val_result['playbook']}\n\n"
+                    result = (
+                        f"❌ Playbook has syntax errors: {val_result['playbook']}\n\n"
+                    )
                     result += f"Errors:\n{val_result['errors']}"
                 else:
                     result = f"❌ {val_result['message']}"
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "ansible_playbook":
                 exec_result = await playbook_manager.run_playbook(
                     playbook=arguments["playbook"],
@@ -1461,14 +3089,16 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     result = f"❌ {exec_result['message']}"
                 else:
                     mode = " (CHECK MODE)" if exec_result.get("check_mode") else ""
-                    status_icon = "✅" if exec_result["status"] == "successful" else "❌"
+                    status_icon = (
+                        "✅" if exec_result["status"] == "successful" else "❌"
+                    )
                     result = f"{status_icon} Playbook execution{mode}: {exec_result['status']}\n"
                     result += f"Playbook: {exec_result['playbook']}\n\n"
                     result += f"Output:\n{exec_result['stdout']}"
                     if exec_result.get("stderr"):
                         result += f"\n\nStderr:\n{exec_result['stderr']}"
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "ansible_task":
                 task_result = await playbook_manager.run_adhoc_task(
                     module=arguments["module"],
@@ -1482,13 +3112,15 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                 if task_result["status"] == "error":
                     result = f"❌ {task_result['message']}"
                 else:
-                    status_icon = "✅" if task_result["status"] == "successful" else "❌"
+                    status_icon = (
+                        "✅" if task_result["status"] == "successful" else "❌"
+                    )
                     result = f"{status_icon} Ad-hoc task: {task_result['module']} on {task_result['hosts']}\n\n"
                     result += f"Output:\n{task_result['stdout']}"
                     if task_result.get("stderr"):
                         result += f"\n\nStderr:\n{task_result['stderr']}"
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "ansible_role":
                 role_result = await playbook_manager.run_role(
                     role=arguments["role"],
@@ -1501,13 +3133,15 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                 if role_result["status"] == "error":
                     result = f"❌ {role_result['message']}"
                 else:
-                    status_icon = "✅" if role_result["status"] == "successful" else "❌"
+                    status_icon = (
+                        "✅" if role_result["status"] == "successful" else "❌"
+                    )
                     result = f"{status_icon} Role execution: {role_result['role']} - {role_result['status']}\n\n"
                     result += f"Output:\n{role_result['stdout']}"
                     if role_result.get("stderr"):
                         result += f"\n\nStderr:\n{role_result['stderr']}"
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "create_role_structure":
                 role_result = playbook_manager.create_role_structure(
                     name=arguments["name"],
@@ -1517,26 +3151,30 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                 if role_result["status"] == "created":
                     result = f"✅ Role scaffolded: {role_result['role']}\n"
                     result += f"Path: {role_result['path']}\n"
-                    result += f"Directories: {', '.join(role_result['directories'])}\n\n"
+                    result += (
+                        f"Directories: {', '.join(role_result['directories'])}\n\n"
+                    )
                     result += "Files created:\n"
                     for f in role_result["files"]:
                         result += f"  - {f}\n"
                 else:
                     result = f"❌ {role_result['message']}"
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "list_playbooks":
                 pb_result = playbook_manager.list_playbooks(
                     workspace=arguments.get("workspace"),
                 )
-                result = f"Playbooks in {pb_result['workspace']} ({pb_result['count']}):\n\n"
+                result = (
+                    f"Playbooks in {pb_result['workspace']} ({pb_result['count']}):\n\n"
+                )
                 for pb in pb_result["playbooks"]:
                     plays_info = f" ({pb['plays']} plays)" if pb.get("plays") else ""
                     result += f"  📄 {pb['name']}{plays_info} - {pb['size']} bytes\n"
                 if not pb_result["playbooks"]:
                     result += "  (none found)\n"
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "list_roles":
                 roles_result = playbook_manager.list_roles(
                     workspace=arguments.get("workspace"),
@@ -1547,7 +3185,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                 if not roles_result["roles"]:
                     result += "  (none found)\n"
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "ansible_inventory":
                 inv_result = await playbook_manager.ansible_inventory_list(
                     inventory=arguments.get("inventory", "localhost,"),
@@ -1557,6 +3195,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     data = inv_result["data"]
                     if isinstance(data, dict):
                         import json as _json
+
                         result = f"Inventory: {inv_result['inventory']}\n\n"
                         result += _json.dumps(data, indent=2, default=str)
                     else:
@@ -1564,9 +3203,9 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                 else:
                     result = f"❌ {inv_result['message']}"
                 return [TextContent(type="text", text=result)]
-            
+
             # ── Project Registry Tool Handlers ──
-            
+
             elif name == "register_project":
                 reg_result = project_registry.register_project(
                     name=arguments["name"],
@@ -1593,17 +3232,19 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                 else:
                     result = f"❌ {reg_result['message']}"
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "unregister_project":
                 unreg_result = project_registry.unregister_project(
                     name=arguments["name"],
                 )
                 if unreg_result["status"] == "removed":
-                    result = f"✅ Project '{unreg_result['project']}' removed from registry"
+                    result = (
+                        f"✅ Project '{unreg_result['project']}' removed from registry"
+                    )
                 else:
                     result = f"❌ {unreg_result['message']}"
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "list_registered_projects":
                 proj_result = project_registry.list_projects()
                 result = f"Registered Projects ({proj_result['count']}):\n\n"
@@ -1620,7 +3261,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                 if not proj_result["projects"]:
                     result += "  (none registered)\n"
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "project_playbooks":
                 disc_result = project_registry.discover_playbooks(
                     project_name=arguments.get("project_name"),
@@ -1637,11 +3278,13 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                         result += "  (none found)\n"
                     result += f"\nRoles ({disc_result['role_count']}):\n"
                     for role in disc_result["roles"]:
-                        result += f"  📁 {role['name']} - {', '.join(role['directories'])}\n"
+                        result += (
+                            f"  📁 {role['name']} - {', '.join(role['directories'])}\n"
+                        )
                     if not disc_result["roles"]:
                         result += "  (none found)\n"
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "project_run_playbook":
                 run_result = await project_registry.project_run_playbook(
                     playbook=arguments["playbook"],
@@ -1665,7 +3308,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     if run_result.get("stderr"):
                         result += f"\n\nStderr:\n{run_result['stderr']}"
                 return [TextContent(type="text", text=result)]
-            
+
             elif name == "git_push_project":
                 push_result = await project_registry.git_push_project(
                     project_name=arguments.get("project_name"),
@@ -1674,7 +3317,7 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                     add_all=arguments.get("add_all", True),
                 )
                 if push_result["status"] == "pushed":
-                    result = f"✅ Changes pushed to git!\n"
+                    result = "✅ Changes pushed to git!\n"
                     result += f"Project: {push_result['project']}\n"
                     result += f"Branch: {push_result['branch']}\n"
                     result += f"Commit: {push_result['message']}\n\n"
@@ -1685,13 +3328,49 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
                 else:
                     result = f"❌ {push_result['message']}"
                 return [TextContent(type="text", text=result)]
-            
+
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]
-        
-        except Exception as e:
+
+        except KeyError as e:
+            # A required argument was missing from the tool call.
+            logger.error("tool_error", tool=name, error=f"missing argument {e}")
+            return [
+                TextContent(
+                    type="text",
+                    text=f"Error: missing required argument {e} for tool '{name}'.",
+                )
+            ]
+        except (AWXAuthenticationError, AWXPermissionError) as e:
             logger.error("tool_error", tool=name, error=str(e))
-            return [TextContent(type="text", text=f"Error: {str(e)}")]
+            return [
+                TextContent(
+                    type="text",
+                    text=f"Authorization error from AWX: {e}. "
+                    "Check the active environment's credentials and permissions.",
+                )
+            ]
+        except AWXConnectionError as e:
+            logger.error("tool_error", tool=name, error=str(e))
+            return [
+                TextContent(
+                    type="text",
+                    text=f"Could not reach AWX: {e}. "
+                    "Check the environment URL and network connectivity.",
+                )
+            ]
+        except AllowlistViolationError as e:
+            logger.error("tool_error", tool=name, error=str(e))
+            return [TextContent(type="text", text=f"Blocked by allowlist policy: {e}.")]
+        except (AWXClientError, AWXMCPError) as e:
+            logger.error("tool_error", tool=name, error=str(e))
+            return [TextContent(type="text", text=f"AWX error: {e}")]
+        except Exception as e:
+            # Unexpected/unclassified error: log the full traceback for triage.
+            logger.exception("tool_error_unexpected", tool=name)
+            return [
+                TextContent(type="text", text=f"Unexpected error in tool '{name}': {e}")
+            ]
 
     return mcp_server
 
@@ -1699,10 +3378,10 @@ def create_mcp_server(tenant_id: Optional[str] = None) -> Server:
 async def main() -> None:
     """Run MCP server in stdio mode (for local VSCode integration)."""
     logger.info("starting_stdio_server")
-    
+
     # Create server without tenant isolation for local use
     mcp_server = create_mcp_server()
-    
+
     async with stdio_server() as (read_stream, write_stream):
         await mcp_server.run(
             read_stream,

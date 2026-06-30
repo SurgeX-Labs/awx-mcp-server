@@ -15,14 +15,14 @@ def configure_logging(debug: bool = False) -> None:
         debug: Enable debug logging
     """
     log_level = logging.DEBUG if debug else logging.INFO
-    
+
     # Configure standard logging
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stderr,
         level=log_level,
     )
-    
+
     # Configure structlog
     structlog.configure(
         processors=[
@@ -31,7 +31,11 @@ def configure_logging(debug: bool = False) -> None:
             structlog.processors.StackInfoRenderer(),
             structlog.dev.set_exc_info,
             structlog.processors.TimeStamper(fmt="iso"),
-            structlog.dev.ConsoleRenderer() if debug else structlog.processors.JSONRenderer(),
+            (
+                structlog.dev.ConsoleRenderer()
+                if debug
+                else structlog.processors.JSONRenderer()
+            ),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(log_level),
         context_class=dict,
@@ -46,7 +50,7 @@ def get_logger(name: str) -> Any:
 
     Args:
         name: Logger name
-    
+
     Returns:
         Structured logger instance
     """

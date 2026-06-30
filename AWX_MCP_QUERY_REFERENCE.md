@@ -23,6 +23,9 @@
 15. [Project Registry](#15-project-registry)
 16. [Git / SCM Integration](#16-git--scm-integration)
 17. [Dev-to-AWX Workflow](#17-dev-to-awx-workflow)
+18. [Workflow Job Templates](#18-workflow-job-templates)
+19. [Workflow Jobs](#19-workflow-jobs)
+20. [Notifications](#20-notifications)
 
 ---
 
@@ -601,6 +604,210 @@ update AWX project from SCM
 
 ---
 
+## 18. Workflow Job Templates
+
+Workflow job templates define multi-step automation pipelines that chain several job templates together.
+
+### List Workflow Templates (`awx_workflow_templates_list`)
+```
+list workflow templates
+show workflow job templates
+what workflows are available
+search workflow templates named "deploy"
+```
+
+### Get Workflow Template (`awx_workflow_template_get`)
+```
+get workflow template 12
+show details for workflow template 12
+describe workflow job template 12
+```
+
+### Workflow Template Nodes / Graph (`awx_workflow_template_nodes`)
+```
+show the nodes in workflow template 12
+list the steps of workflow template 12
+what job templates run in workflow 12
+show the workflow graph for template 12
+```
+
+### Workflow Template Survey (`awx_workflow_template_survey`)
+```
+show the survey for workflow template 12
+what questions does workflow 12 prompt
+get survey spec for workflow template 12
+```
+
+### Workflow Template Schedules (`awx_workflow_template_schedules`)
+```
+list schedules for workflow template 12
+when does workflow template 12 run automatically
+show schedules of workflow 12
+```
+
+### Workflow Template Launch Config (`awx_workflow_template_launch_config`)
+```
+show the launch config for workflow template 12
+what can I prompt on launch for workflow 12
+get launch configuration of workflow template 12
+```
+
+---
+
+## 19. Workflow Jobs
+
+Workflow jobs are the executions (runs) of a workflow job template.
+
+### Launch Workflow Job (`awx_workflow_job_launch`)
+```
+launch workflow template 12
+run workflow 12
+execute workflow template 12 with extra vars {"env": "staging"}
+start workflow 12 limited to "webservers"
+```
+
+### Get Workflow Job (`awx_workflow_job_get`)
+```
+get workflow job 340
+show status of workflow job 340
+describe workflow job 340
+why did workflow job 340 fail
+```
+
+### List Workflow Jobs (`awx_workflow_jobs_list`)
+```
+list workflow jobs
+show recent workflow runs
+workflow job history
+show failed workflow jobs
+```
+
+### Cancel Workflow Job (`awx_workflow_job_cancel`)
+```
+cancel workflow job 340
+stop running workflow 340
+abort workflow job 340
+```
+
+### Workflow Job Nodes (`awx_workflow_job_nodes`)
+```
+show the nodes of workflow job 340
+list the steps of workflow run 340
+which step of workflow job 340 failed
+show per-node status for workflow job 340
+```
+
+### Relaunch Workflow Job (`awx_workflow_job_relaunch`)
+```
+relaunch workflow job 340
+rerun workflow 340
+run workflow job 340 again
+```
+
+### Delete Workflow Job (`awx_workflow_job_delete`)
+```
+delete workflow job 340
+remove workflow run 340 from history
+clean up workflow job 340
+```
+
+---
+
+## 20. Notifications
+
+Manage notification templates (Slack, email, webhook, etc.), view delivery history, and wire notifications to job and workflow templates for started / success / error events.
+
+### List Notification Templates (`awx_notification_templates_list`)
+```
+list notification templates
+show configured notifications
+what slack/email/webhook notifications exist
+```
+
+### Get Notification Template (`awx_notification_template_get`)
+```
+get notification template 4
+show details for notification template 4
+describe notification template 4
+```
+
+### Create Notification Template (`awx_notification_template_create`)
+```
+create a slack notification template
+add an email notification for the ops team
+create a webhook notification template
+```
+
+### Update Notification Template (`awx_notification_template_update`)
+```
+update notification template 4
+change the slack channel for notification template 4
+edit the custom message on notification template 4
+```
+
+### Delete Notification Template (`awx_notification_template_delete`)
+```
+delete notification template 4
+remove notification template 4
+```
+
+### Test Notification Template (`awx_notification_template_test`)
+```
+test notification template 4
+send a test notification from template 4
+verify notification template 4 works
+```
+
+### Notification History (`awx_notifications_list`)
+```
+list sent notifications
+show notification delivery history
+show failed notifications
+recent notification log
+```
+
+### Job Template Notifications (`awx_job_template_notifications_list`)
+```
+list notifications for job template 1
+which notifications fire for job template 1
+show notification settings of template 1
+```
+
+### Associate Notification to Job Template (`awx_job_template_notification_associate`)
+```
+attach notification template 4 to job template 1 on error
+notify slack template 4 when job template 1 succeeds
+add started notification 4 to job template 1
+```
+
+### Disassociate Notification from Job Template (`awx_job_template_notification_disassociate`)
+```
+remove notification template 4 from job template 1 on error
+detach success notification 4 from job template 1
+```
+
+### Workflow Template Notifications (`awx_workflow_template_notifications_list`)
+```
+list notifications for workflow template 12
+which notifications fire for workflow 12
+show notification settings of workflow template 12
+```
+
+### Associate Notification to Workflow Template (`awx_workflow_template_notification_associate`)
+```
+attach notification template 4 to workflow template 12 on error
+notify slack template 4 when workflow 12 succeeds
+add started notification 4 to workflow template 12
+```
+
+### Disassociate Notification from Workflow Template (`awx_workflow_template_notification_disassociate`)
+```
+remove notification template 4 from workflow template 12 on error
+detach success notification 4 from workflow template 12
+```
+
+---
+
 ## Combined / Multi-Step Queries
 
 These queries may trigger multiple tool calls:
@@ -693,3 +900,29 @@ list projects and show templates for project 1
 | `project_playbooks` | Project Registry | Discover playbooks in project |
 | `project_run_playbook` | Project Registry | Run playbook from registered project |
 | `git_push_project` | Git/SCM | Commit and push project to git remote |
+| `awx_workflow_templates_list` | Workflow Templates | List workflow job templates |
+| `awx_workflow_template_get` | Workflow Templates | Get a workflow job template by ID |
+| `awx_workflow_template_nodes` | Workflow Templates | Get the workflow template node graph |
+| `awx_workflow_template_survey` | Workflow Templates | Get the workflow template survey spec |
+| `awx_workflow_template_schedules` | Workflow Templates | List schedules for a workflow template |
+| `awx_workflow_template_launch_config` | Workflow Templates | Get workflow template launch config |
+| `awx_workflow_job_launch` | Workflow Jobs | Launch a workflow from a template |
+| `awx_workflow_job_get` | Workflow Jobs | Get workflow job status/details |
+| `awx_workflow_jobs_list` | Workflow Jobs | List recent workflow job runs |
+| `awx_workflow_job_cancel` | Workflow Jobs | Cancel a running workflow job |
+| `awx_workflow_job_nodes` | Workflow Jobs | Get per-node details of a workflow job |
+| `awx_workflow_job_relaunch` | Workflow Jobs | Relaunch a previous workflow job |
+| `awx_workflow_job_delete` | Workflow Jobs | Delete a workflow job record |
+| `awx_notification_templates_list` | Notifications | List notification templates |
+| `awx_notification_template_get` | Notifications | Get a notification template by ID |
+| `awx_notification_template_create` | Notifications | Create a notification template |
+| `awx_notification_template_update` | Notifications | Update a notification template (partial) |
+| `awx_notification_template_delete` | Notifications | Delete a notification template |
+| `awx_notification_template_test` | Notifications | Send a test notification |
+| `awx_notifications_list` | Notifications | List sent notification history |
+| `awx_job_template_notifications_list` | Notifications | List a job template's notifications |
+| `awx_job_template_notification_associate` | Notifications | Attach notification to a job template |
+| `awx_job_template_notification_disassociate` | Notifications | Remove notification from a job template |
+| `awx_workflow_template_notifications_list` | Notifications | List a workflow template's notifications |
+| `awx_workflow_template_notification_associate` | Notifications | Attach notification to a workflow template |
+| `awx_workflow_template_notification_disassociate` | Notifications | Remove notification from a workflow template |

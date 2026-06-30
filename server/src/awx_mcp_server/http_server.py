@@ -5,20 +5,17 @@ import json
 import secrets
 from datetime import datetime, timedelta
 from typing import Any, Optional, AsyncIterator
-from collections.abc import Sequence
 
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse, Response
 from mcp.server import Server
-from mcp.types import TextContent, ImageContent, EmbeddedResource
 from pydantic import BaseModel
-import structlog
 
+from prometheus_client import CONTENT_TYPE_LATEST
 from awx_mcp_server.monitoring import (
     monitoring_service,
     RequestTimer,
-    CONTENT_TYPE_LATEST,
 )
 
 # Import local components
@@ -33,6 +30,7 @@ API_KEYS: dict[str, dict[str, Any]] = {}
 
 class APIKeyCreate(BaseModel):
     """API key creation request."""
+
     name: str
     tenant_id: str
     expires_days: Optional[int] = 90
@@ -40,6 +38,7 @@ class APIKeyCreate(BaseModel):
 
 class APIKeyResponse(BaseModel):
     """API key response."""
+
     api_key: str
     name: str
     tenant_id: str
@@ -51,15 +50,15 @@ def verify_api_key(x_api_key: str = Header(...)) -> dict[str, Any]:
     """Verify API key and return tenant info."""
     if x_api_key not in API_KEYS:
         raise HTTPException(status_code=401, detail="Invalid API key")
-    
+
     key_info = API_KEYS[x_api_key]
-    
+
     # Check expiration
     if key_info.get("expires_at"):
         expires_at = datetime.fromisoformat(key_info["expires_at"])
         if datetime.utcnow() > expires_at:
             raise HTTPException(status_code=401, detail="API key expired")
-    
+
     return key_info
 
 
@@ -81,7 +80,7 @@ def verify_api_key_optional(x_api_key: Optional[str] = Header(None)) -> dict[str
         else:
             # API key provided but invalid
             raise HTTPException(status_code=401, detail="Invalid API key")
-    
+
     # No API key provided - use anonymous/default tenant
     # For production, you may want to require API keys
     return {
@@ -98,7 +97,7 @@ def extract_awx_config_from_headers(request: Request) -> dict[str, str]:
     """
     headers = request.headers
     config = {}
-    
+
     if "X-AWX-Base-URL" in headers:
         config["AWX_BASE_URL"] = headers["X-AWX-Base-URL"]
     if "X-AWX-Token" in headers:
@@ -111,11 +110,13 @@ def extract_awx_config_from_headers(request: Request) -> dict[str, str]:
         config["AWX_PLATFORM"] = headers["X-AWX-Platform"]
     if "X-AWX-Verify-SSL" in headers:
         config["AWX_VERIFY_SSL"] = headers["X-AWX-Verify-SSL"]
-    
+
     return config
 
 
-async def process_mcp_message(mcp_server: Server, message: dict, tenant_id: str) -> dict:
+async def process_mcp_message(
+    mcp_server: Server, message: dict, tenant_id: str
+) -> dict:
     """
     Process an MCP JSON-RPC message and return the result.
     Handles: initialize, tools/list, tools/call, resources/list, etc.
@@ -123,7 +124,7 @@ async def process_mcp_message(mcp_server: Server, message: dict, tenant_id: str)
     method = message.get("method")
     params = message.get("params", {})
     msg_id = message.get("id")
-    
+
     try:
         # Handle different MCP methods
         if method == "initialize":
@@ -139,66 +140,75 @@ async def process_mcp_message(mcp_server: Server, message: dict, tenant_id: str)
                     "version": "1.1.6",
                 },
             }
-            
+
         elif method == "tools/list":
             # List available tools - call the server's handler using class type as key
             from mcp.types import ListToolsRequest
+
             request = ListToolsRequest(method="tools/list", params=params)
             handler = mcp_server.request_handlers[ListToolsRequest]
             server_result = await handler(request)
             # ServerResult is a Pydantic RootModel - access the wrapped result via .root
             tools_result = server_result.root
             result = {"tools": [tool.model_dump() for tool in tools_result.tools]}
-            
+
         elif method == "tools/call":
             # Call a specific tool
             tool_name = params.get("name")
             tool_args = params.get("arguments", {})
-            
-            logger.info("tool_call", tenant_id=tenant_id, tool=tool_name, args=tool_args)
-            
+
+            logger.info(
+                "tool_call", tenant_id=tenant_id, tool=tool_name, args=tool_args
+            )
+
             # Create proper MCP request using class type as key
             from mcp.types import CallToolRequest
+
             request = CallToolRequest(
-                method="tools/call",
-                params={"name": tool_name, "arguments": tool_args}
+                method="tools/call", params={"name": tool_name, "arguments": tool_args}
             )
-            
+
             # Execute the tool through MCP server
             handler = mcp_server.request_handlers[CallToolRequest]
             server_result = await handler(request)
             # ServerResult is a Pydantic RootModel - access the wrapped result via .root
             tool_result = server_result.root
-            
+
             # Convert result to JSON-serializable format
             result = {
                 "content": [
                     {
                         "type": content.type,
-                        "text": content.text if hasattr(content, 'text') else str(content),
+                        "text": (
+                            content.text if hasattr(content, "text") else str(content)
+                        ),
                     }
                     for content in tool_result.content
                 ]
             }
-            
+
         elif method == "resources/list":
             # List available resources using class type as key
             from mcp.types import ListResourcesRequest
+
             request = ListResourcesRequest(method="resources/list", params=params)
             handler = mcp_server.request_handlers[ListResourcesRequest]
             server_result = await handler(request)
             # ServerResult is a Pydantic RootModel - access the wrapped result via .root
             resources_result = server_result.root
-            result = {"resources": [res.model_dump() for res in resources_result.resources]}
-            
+            result = {
+                "resources": [res.model_dump() for res in resources_result.resources]
+            }
+
         elif method == "ping":
             # Ping/pong for keep-alive
             from mcp.types import PingRequest
+
             request = PingRequest(method="ping", params=params)
             handler = mcp_server.request_handlers[PingRequest]
-            ping_result = await handler(request)
+            await handler(request)
             result = {}  # Ping returns empty result
-            
+
         else:
             # Unknown method
             return {
@@ -207,19 +217,25 @@ async def process_mcp_message(mcp_server: Server, message: dict, tenant_id: str)
                 "error": {
                     "code": -32601,
                     "message": f"Method not found: {method}",
-                }
+                },
             }
-        
+
         # Return successful result
         return {
             "jsonrpc": "2.0",
             "id": msg_id,
             "result": result,
         }
-        
+
     except Exception as e:
-        logger.error("process_mcp_message_error", method=method, error=str(e), tenant_id=tenant_id)
+        logger.error(
+            "process_mcp_message_error",
+            method=method,
+            error=str(e),
+            tenant_id=tenant_id,
+        )
         import traceback
+
         traceback.print_exc()
         return {
             "jsonrpc": "2.0",
@@ -227,7 +243,7 @@ async def process_mcp_message(mcp_server: Server, message: dict, tenant_id: str)
             "error": {
                 "code": -32603,
                 "message": f"Internal error: {str(e)}",
-            }
+            },
         }
 
 
@@ -257,7 +273,7 @@ def create_app(mcp_server: Server) -> FastAPI:
         tenant_id = request.headers.get("X-API-Key", "anonymous")
         if tenant_id in API_KEYS:
             tenant_id = API_KEYS[tenant_id].get("tenant_id", tenant_id)
-        
+
         with RequestTimer(
             tenant_id=tenant_id,
             endpoint=request.url.path,
@@ -288,7 +304,7 @@ def create_app(mcp_server: Server) -> FastAPI:
                 "prometheus": "/prometheus-metrics",
                 "stats": "/stats",
                 "docs": "/docs",
-            }
+            },
         }
 
     @app.get("/health")
@@ -321,7 +337,7 @@ def create_app(mcp_server: Server) -> FastAPI:
         """
         if authorization != "Bearer admin-secret-token":
             raise HTTPException(status_code=403, detail="Admin access required")
-        
+
         # Generate secure API key
         api_key = f"awx_mcp_{secrets.token_urlsafe(32)}"
         created_at = datetime.utcnow()
@@ -330,7 +346,7 @@ def create_app(mcp_server: Server) -> FastAPI:
             if key_request.expires_days
             else None
         )
-        
+
         # Store API key
         API_KEYS[api_key] = {
             "name": key_request.name,
@@ -338,13 +354,13 @@ def create_app(mcp_server: Server) -> FastAPI:
             "created_at": created_at.isoformat(),
             "expires_at": expires_at.isoformat() if expires_at else None,
         }
-        
+
         logger.info(
             "api_key_created",
             tenant_id=key_request.tenant_id,
             name=key_request.name,
         )
-        
+
         return APIKeyResponse(
             api_key=api_key,
             name=key_request.name,
@@ -358,7 +374,7 @@ def create_app(mcp_server: Server) -> FastAPI:
         """List all API keys (admin only)."""
         if authorization != "Bearer admin-secret-token":
             raise HTTPException(status_code=403, detail="Admin access required")
-        
+
         return {
             "keys": [
                 {
@@ -381,39 +397,46 @@ def create_app(mcp_server: Server) -> FastAPI:
         """
         Main MCP JSON-RPC endpoint for VS Code and other MCP clients.
         Handles all MCP protocol messages via HTTP POST.
-        
+
         Optional API key authentication - if not provided, uses default tenant.
         AWX credentials can be passed via X-AWX-* headers.
         """
         tenant_id = tenant_info["tenant_id"]
-        
+
         try:
             # Get JSON-RPC message
             message = await request.json()
-            logger.info("mcp_message_received", tenant_id=tenant_id, method=message.get("method"))
-            
+            logger.info(
+                "mcp_message_received",
+                tenant_id=tenant_id,
+                method=message.get("method"),
+            )
+
             # Extract AWX config from headers (allows per-request credentials)
             awx_config = extract_awx_config_from_headers(request)
-            
+
             # Temporarily set environment variables for this request
             import os
+
             original_env = {}
             for key, value in awx_config.items():
                 original_env[key] = os.environ.get(key)
                 os.environ[key] = value
-            
+
             try:
                 # Process MCP message through the server
                 # The mcp_server handles: initialize, tools/list, tools/call, resources/list, etc.
                 result = await process_mcp_message(mcp_server, message, tenant_id)
-                
+
                 # Record metrics
-                if message.get("method") ==  "tools/call":
+                if message.get("method") == "tools/call":
                     tool_name = message.get("params", {}).get("name")
-                    monitoring_service.record_tool_call(tenant_id, tool_name, success=True)
-                
+                    monitoring_service.record_tool_call(
+                        tenant_id, tool_name, success=True
+                    )
+
                 return result
-                
+
             finally:
                 # Restore original environment
                 for key, original_value in original_env.items():
@@ -421,13 +444,13 @@ def create_app(mcp_server: Server) -> FastAPI:
                         os.environ.pop(key, None)
                     else:
                         os.environ[key] = original_value
-                        
+
         except Exception as e:
             logger.error("mcp_error", error=str(e), tenant_id=tenant_id)
             if message.get("method") == "tools/call":
                 tool_name = message.get("params", {}).get("name")
                 monitoring_service.record_tool_call(tenant_id, tool_name, success=False)
-            
+
             # Return JSON-RPC error
             return JSONResponse(
                 status_code=200,  # JSON-RPC errors use 200 with error in body
@@ -437,8 +460,8 @@ def create_app(mcp_server: Server) -> FastAPI:
                     "error": {
                         "code": -32603,
                         "message": str(e),
-                    }
-                }
+                    },
+                },
             )
 
     @app.get("/mcp/sse")
@@ -451,12 +474,12 @@ def create_app(mcp_server: Server) -> FastAPI:
         Used by some MCP clients for real-time updates.
         """
         tenant_id = tenant_info["tenant_id"]
-        
+
         async def event_stream() -> AsyncIterator[str]:
             """Generate SSE events."""
             # Send initial connection event
             yield f"event: connected\ndata: {json.dumps({'tenant_id': tenant_id})}\n\n"
-            
+
             # Keep connection alive with periodic heartbeat
             try:
                 while True:
@@ -465,7 +488,7 @@ def create_app(mcp_server: Server) -> FastAPI:
             except asyncio.CancelledError:
                 logger.info("sse_connection_closed", tenant_id=tenant_id)
                 raise
-        
+
         return StreamingResponse(
             event_stream(),
             media_type="text/event-stream",
@@ -473,7 +496,7 @@ def create_app(mcp_server: Server) -> FastAPI:
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",  # Disable nginx buffering
-            }
+            },
         )
 
     @app.options("/mcp")
@@ -486,7 +509,7 @@ def create_app(mcp_server: Server) -> FastAPI:
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
                 "Access-Control-Allow-Headers": "Content-Type, X-API-Key, X-AWX-Base-URL, X-AWX-Token, X-AWX-Platform, X-AWX-Username, X-AWX-Password, X-AWX-Verify-SSL",
-            }
+            },
         )
 
     # =============================================================================
@@ -498,19 +521,19 @@ def create_app(mcp_server: Server) -> FastAPI:
     ):
         """Handle MCP messages via POST with monitoring."""
         tenant_id = tenant_info["tenant_id"]
-        
+
         logger.info("message_received", tenant_id=tenant_id)
         monitoring_service.record_chat_interaction(tenant_id, source="api")
-        
+
         try:
             message = await request.json()
-            
+
             # Extract tool name if it's a tool call
             tool_name = None
             if message.get("method") == "tools/call":
                 tool_name = message.get("params", {}).get("name")
                 monitoring_service.record_tool_call(tenant_id, tool_name, success=True)
-            
+
             # Process MCP message through your server
             # For now, return a simple response
             result = {
@@ -520,11 +543,11 @@ def create_app(mcp_server: Server) -> FastAPI:
                     "status": "received",
                     "tenant_id": tenant_id,
                     "tool_name": tool_name,
-                }
+                },
             }
-            
+
             return result
-            
+
         except Exception as e:
             logger.error("message_error", error=str(e), tenant_id=tenant_id)
             if tool_name:
@@ -534,22 +557,25 @@ def create_app(mcp_server: Server) -> FastAPI:
     # Helper function to get AWX client
     async def get_client(tenant_id: str):
         """Get AWX client for tenant."""
-        from awx_mcp_server.storage import ConfigManager, CredentialStore
         from awx_mcp_server.clients import CompositeAWXClient
         from awx_mcp_server.domain import CredentialType
-        
+
         config_manager = ConfigManager(tenant_id=tenant_id)
         credential_store = CredentialStore(tenant_id=tenant_id)
-        
+
         env = config_manager.get_active()
-        
+
         try:
-            username, secret = credential_store.get_credential(env.env_id, CredentialType.PASSWORD)
+            username, secret = credential_store.get_credential(
+                env.env_id, CredentialType.PASSWORD
+            )
             is_token = False
-        except:
-            username, secret = credential_store.get_credential(env.env_id, CredentialType.TOKEN)
+        except Exception:
+            username, secret = credential_store.get_credential(
+                env.env_id, CredentialType.TOKEN
+            )
             is_token = True
-        
+
         return CompositeAWXClient(env, username, secret, is_token)
 
     # AWX REST API Endpoints
@@ -559,15 +585,13 @@ def create_app(mcp_server: Server) -> FastAPI:
     async def list_environments(tenant_info: dict = Depends(verify_api_key)):
         """List all AWX environments."""
         tenant_id = tenant_info["tenant_id"]
-        from awx_mcp_server.storage import ConfigManager
-        
+
         config_manager = ConfigManager(tenant_id=tenant_id)
         envs = config_manager.list()
-        
+
         return {
             "environments": [
-                {"id": e.env_id, "name": e.name, "url": str(e.base_url)}
-                for e in envs
+                {"id": e.env_id, "name": e.name, "url": str(e.base_url)} for e in envs
             ]
         }
 
@@ -575,16 +599,15 @@ def create_app(mcp_server: Server) -> FastAPI:
     async def get_active_environment(tenant_info: dict = Depends(verify_api_key)):
         """Get active AWX environment."""
         tenant_id = tenant_info["tenant_id"]
-        from awx_mcp_server.storage import ConfigManager
-        
+
         config_manager = ConfigManager(tenant_id=tenant_id)
         env = config_manager.get_active()
-        
+
         return {
             "environment": {
                 "id": env.env_id,
                 "name": env.name,
-                "url": str(env.base_url)
+                "url": str(env.base_url),
             }
         }
 
@@ -594,8 +617,11 @@ def create_app(mcp_server: Server) -> FastAPI:
         tenant_id = tenant_info["tenant_id"]
         client = await get_client(tenant_id)
         result = await client.test_connection()
-        
-        return {"success": result, "message": "Connection successful" if result else "Connection failed"}
+
+        return {
+            "success": result,
+            "message": "Connection successful" if result else "Connection failed",
+        }
 
     # Job Templates
     @app.get("/api/v1/job-templates")
@@ -603,13 +629,15 @@ def create_app(mcp_server: Server) -> FastAPI:
         filter: Optional[str] = None,
         page: int = 1,
         page_size: int = 25,
-        tenant_info: dict = Depends(verify_api_key)
+        tenant_info: dict = Depends(verify_api_key),
     ):
         """List job templates."""
         tenant_id = tenant_info["tenant_id"]
         client = await get_client(tenant_id)
-        templates = await client.list_job_templates(name_filter=filter, page=page, page_size=page_size)
-        
+        templates = await client.list_job_templates(
+            name_filter=filter, page=page, page_size=page_size
+        )
+
         return {
             "templates": [
                 {
@@ -619,7 +647,7 @@ def create_app(mcp_server: Server) -> FastAPI:
                     "job_type": t.job_type,
                     "inventory": t.inventory,
                     "project": t.project,
-                    "playbook": t.playbook
+                    "playbook": t.playbook,
                 }
                 for t in templates
             ]
@@ -631,7 +659,7 @@ def create_app(mcp_server: Server) -> FastAPI:
         tenant_id = tenant_info["tenant_id"]
         client = await get_client(tenant_id)
         template = await client.get_job_template(name)
-        
+
         return {
             "template": {
                 "id": template.id,
@@ -641,7 +669,7 @@ def create_app(mcp_server: Server) -> FastAPI:
                 "inventory": template.inventory,
                 "project": template.project,
                 "playbook": template.playbook,
-                "extra_vars": template.extra_vars
+                "extra_vars": template.extra_vars,
             }
         }
 
@@ -651,13 +679,15 @@ def create_app(mcp_server: Server) -> FastAPI:
         status: Optional[str] = None,
         page: int = 1,
         page_size: int = 10,
-        tenant_info: dict = Depends(verify_api_key)
+        tenant_info: dict = Depends(verify_api_key),
     ):
         """List jobs."""
         tenant_id = tenant_info["tenant_id"]
         client = await get_client(tenant_id)
-        jobs = await client.list_jobs(status_filter=status, page=page, page_size=page_size)
-        
+        jobs = await client.list_jobs(
+            status_filter=status, page=page, page_size=page_size
+        )
+
         return {
             "jobs": [
                 {
@@ -666,7 +696,7 @@ def create_app(mcp_server: Server) -> FastAPI:
                     "status": j.status,
                     "started": str(j.started) if j.started else None,
                     "finished": str(j.finished) if j.finished else None,
-                    "elapsed": j.elapsed
+                    "elapsed": j.elapsed,
                 }
                 for j in jobs
             ]
@@ -678,7 +708,7 @@ def create_app(mcp_server: Server) -> FastAPI:
         tenant_id = tenant_info["tenant_id"]
         client = await get_client(tenant_id)
         job = await client.get_job(job_id)
-        
+
         return {
             "job": {
                 "id": job.id,
@@ -686,32 +716,23 @@ def create_app(mcp_server: Server) -> FastAPI:
                 "status": job.status,
                 "started": str(job.started) if job.started else None,
                 "finished": str(job.finished) if job.finished else None,
-                "elapsed": job.elapsed
+                "elapsed": job.elapsed,
             }
         }
 
     @app.post("/api/v1/jobs/launch")
-    async def launch_job(
-        request: Request,
-        tenant_info: dict = Depends(verify_api_key)
-    ):
+    async def launch_job(request: Request, tenant_info: dict = Depends(verify_api_key)):
         """Launch a job."""
         tenant_id = tenant_info["tenant_id"]
         client = await get_client(tenant_id)
-        
+
         data = await request.json()
         template_name = data.get("template_name")
         extra_vars = data.get("extra_vars")
-        
+
         job = await client.launch_job(template_name, extra_vars)
-        
-        return {
-            "job": {
-                "id": job.id,
-                "name": job.name,
-                "status": job.status
-            }
-        }
+
+        return {"job": {"id": job.id, "name": job.name, "status": job.status}}
 
     @app.post("/api/v1/jobs/{job_id}/cancel")
     async def cancel_job(job_id: int, tenant_info: dict = Depends(verify_api_key)):
@@ -719,7 +740,7 @@ def create_app(mcp_server: Server) -> FastAPI:
         tenant_id = tenant_info["tenant_id"]
         client = await get_client(tenant_id)
         await client.cancel_job(job_id)
-        
+
         return {"success": True, "message": f"Job {job_id} canceled"}
 
     @app.get("/api/v1/jobs/{job_id}/stdout")
@@ -728,7 +749,7 @@ def create_app(mcp_server: Server) -> FastAPI:
         tenant_id = tenant_info["tenant_id"]
         client = await get_client(tenant_id)
         output = await client.get_job_stdout(job_id)
-        
+
         return {"job_id": job_id, "output": output}
 
     @app.get("/api/v1/jobs/{job_id}/events")
@@ -736,21 +757,16 @@ def create_app(mcp_server: Server) -> FastAPI:
         job_id: int,
         page: int = 1,
         page_size: int = 50,
-        tenant_info: dict = Depends(verify_api_key)
+        tenant_info: dict = Depends(verify_api_key),
     ):
         """Get job events."""
         tenant_id = tenant_info["tenant_id"]
         client = await get_client(tenant_id)
         events = await client.get_job_events(job_id, page, page_size)
-        
+
         return {
             "events": [
-                {
-                    "event": e.event,
-                    "task": e.task,
-                    "role": e.role,
-                    "stdout": e.stdout
-                }
+                {"event": e.event, "task": e.task, "role": e.role, "stdout": e.stdout}
                 for e in events
             ]
         }
@@ -758,15 +774,13 @@ def create_app(mcp_server: Server) -> FastAPI:
     # Projects
     @app.get("/api/v1/projects")
     async def list_projects(
-        page: int = 1,
-        page_size: int = 25,
-        tenant_info: dict = Depends(verify_api_key)
+        page: int = 1, page_size: int = 25, tenant_info: dict = Depends(verify_api_key)
     ):
         """List projects."""
         tenant_id = tenant_info["tenant_id"]
         client = await get_client(tenant_id)
         projects = await client.list_projects(page=page, page_size=page_size)
-        
+
         return {
             "projects": [
                 {
@@ -774,7 +788,7 @@ def create_app(mcp_server: Server) -> FastAPI:
                     "name": p.name,
                     "description": p.description,
                     "scm_type": p.scm_type,
-                    "scm_url": p.scm_url
+                    "scm_url": p.scm_url,
                 }
                 for p in projects
             ]
@@ -786,28 +800,22 @@ def create_app(mcp_server: Server) -> FastAPI:
         tenant_id = tenant_info["tenant_id"]
         client = await get_client(tenant_id)
         await client.update_project(name)
-        
+
         return {"success": True, "message": f"Project '{name}' update initiated"}
 
     # Inventories
     @app.get("/api/v1/inventories")
     async def list_inventories(
-        page: int = 1,
-        page_size: int = 25,
-        tenant_info: dict = Depends(verify_api_key)
+        page: int = 1, page_size: int = 25, tenant_info: dict = Depends(verify_api_key)
     ):
         """List inventories."""
         tenant_id = tenant_info["tenant_id"]
         client = await get_client(tenant_id)
         inventories = await client.list_inventories(page=page, page_size=page_size)
-        
+
         return {
             "inventories": [
-                {
-                    "id": i.id,
-                    "name": i.name,
-                    "description": i.description
-                }
+                {"id": i.id, "name": i.name, "description": i.description}
                 for i in inventories
             ]
         }
@@ -834,23 +842,25 @@ async def start_http_server(
 ):
     """Start the HTTP server with monitoring."""
     configure_logging(debug=debug)
-    
+
     # Import MCP server
     try:
         from awx_mcp_server.mcp_server import create_mcp_server
+
         mcp_server = create_mcp_server()
     except ImportError:
         logger.warning("Could not import MCP server, using basic server")
         from mcp.server import Server
+
         mcp_server = Server("awx-mcp-server")
-    
+
     app = create_app(mcp_server)
-    
+
     logger.info("starting_http_server", host=host, port=port)
-    
+
     # Use uvicorn
     import uvicorn
-    
+
     config = uvicorn.Config(
         app,
         host=host,
@@ -858,7 +868,7 @@ async def start_http_server(
         log_level="debug" if debug else "info",
         access_log=True,
     )
-    
+
     server = uvicorn.Server(config)
     await server.serve()
 
@@ -866,12 +876,12 @@ async def start_http_server(
 if __name__ == "__main__":
     """Entry point for running as a module."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="AWX MCP HTTP Server")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
     parser.add_argument("--port", type=int, default=8000, help="Port to bind to")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
-    
+
     args = parser.parse_args()
-    
+
     asyncio.run(start_http_server(host=args.host, port=args.port, debug=args.debug))

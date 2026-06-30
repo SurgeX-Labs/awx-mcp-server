@@ -5,6 +5,32 @@ All notable changes to the AWX MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-04-24
+
+### Added
+- **Workflow Job Template support (PR #1)** — 13 new MCP tools for AWX workflows:
+  - Templates: `awx_workflow_templates_list`, `awx_workflow_template_get`,
+    `awx_workflow_template_nodes`, `awx_workflow_template_survey`,
+    `awx_workflow_template_schedules`, `awx_workflow_template_launch_config`
+  - Jobs: `awx_workflow_job_launch`, `awx_workflow_job_get`, `awx_workflow_jobs_list`,
+    `awx_workflow_job_cancel`, `awx_workflow_job_nodes`, `awx_workflow_job_relaunch`,
+    `awx_workflow_job_delete`
+- **Notification support (PR #1)** — 13 new MCP tools:
+  - Notification templates: `awx_notification_templates_list`,
+    `awx_notification_template_get`, `awx_notification_template_create`,
+    `awx_notification_template_update`, `awx_notification_template_delete`,
+    `awx_notification_template_test`
+  - History: `awx_notifications_list`
+  - Job-template associations: `awx_job_template_notifications_list`,
+    `awx_job_template_notification_associate`, `awx_job_template_notification_disassociate`
+  - Workflow-template associations: `awx_workflow_template_notifications_list`,
+    `awx_workflow_template_notification_associate`, `awx_workflow_template_notification_disassociate`
+- Documentation updated for the new tools: `AWX_MCP_QUERY_REFERENCE.md`
+  (new Workflow Job Templates, Workflow Jobs, and Notifications sections + Tool
+  Summary Table rows) and `server/README.md`. Total tool count is now **76**.
+
+_Contributed by Connor Griffin (`connor-griffin5`)._
+
 ## [1.2.0] - 2026-02-22
 
 ### Added
