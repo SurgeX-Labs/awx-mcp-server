@@ -96,7 +96,7 @@ class JobTemplate(BaseModel):
     description: Optional[str] = None
     job_type: str
     inventory: Optional[int] = None
-    project: int
+    project: Optional[int] = None
     playbook: str
     extra_vars: dict[str, Any] = Field(default_factory=dict)
 
