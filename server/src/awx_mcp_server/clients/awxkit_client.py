@@ -131,7 +131,7 @@ class AwxkitClient(AWXClient):
                 description=item.get("description"),
                 job_type=item.get("job_type", "run"),
                 inventory=item.get("inventory"),
-                project=item["project"],
+                project=item.get("project"),
                 playbook=item["playbook"],
                 extra_vars=item.get("extra_vars", {}),
             )
@@ -148,7 +148,7 @@ class AwxkitClient(AWXClient):
             description=data.get("description"),
             job_type=data.get("job_type", "run"),
             inventory=data.get("inventory"),
-            project=data["project"],
+            project=data.get("project"),
             playbook=data["playbook"],
             extra_vars=data.get("extra_vars", {}),
         )
