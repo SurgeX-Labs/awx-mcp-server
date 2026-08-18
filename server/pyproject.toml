@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "awx-mcp-server"
-version = "1.2.0"
+version = "2.0.0"
 description = "AWX MCP Server - Control AWX/AAP/Ansible Tower through the Model Context Protocol"
 requires-python = ">=3.10"
 authors = [
@@ -14,7 +14,7 @@ readme = "README.md"
 license = {text = "MIT"}
 keywords = ["awx", "ansible", "mcp", "automation", "model-context-protocol", "github-copilot", "claude"]
 dependencies = [
-    "mcp>=1.0.0",
+    "mcp>=2.0.0",
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
     "python-multipart>=0.0.6",

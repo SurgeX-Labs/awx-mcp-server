@@ -5,6 +5,32 @@ All notable changes to the AWX MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0]
+
+### Changed
+- Ported the server to the modern MCP SDK (`mcp>=2.0`) high-level `MCPServer`
+  API. Every tool is now a typed async function registered with
+  `@mcp_server.tool`; input schemas are generated from type hints instead of
+  hand-written JSON Schema. Tool names, descriptions, and text output are
+  unchanged, and enum-constrained fields (`info_type`, `job_type`, `scm_type`,
+  `format`) keep their enums via `Literal` types.
+- The HTTP mode now serves the MCP protocol with the SDK's streamable-http
+  transport (proper session management) mounted at `/mcp`, replacing the
+  hand-rolled JSON-RPC dispatch that depended on pre-2.0 SDK internals. REST
+  v1 endpoints, health, Prometheus metrics, and API key management are
+  unchanged.
+
+### Removed
+- The `/mcp/sse` heartbeat-only endpoint (superseded by streamable-http).
+- Per-request AWX credentials via `X-AWX-*` headers on `/mcp`. The mechanism
+  mutated process-wide environment variables per request, which raced between
+  concurrent tenants. Process-level environment variables still work.
+
+### Fixed
+- Fresh installs no longer crash on startup with
+  `'Server' object has no attribute 'list_tools'` when the unbounded `mcp`
+  dependency resolved to the 2.x SDK.
+
 ## [1.2.0] - 2026-02-22
 
 ### Added

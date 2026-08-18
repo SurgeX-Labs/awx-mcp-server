@@ -19,7 +19,7 @@ from awx_mcp_server.domain import CredentialType
 
 
 @click.group()
-@click.version_option(version="1.1.6")
+@click.version_option(version="2.0.0")
 def main():
     """AWX MCP Remote Server - CLI and API for AWX/AAP automation."""
     pass
