@@ -131,8 +131,8 @@ class AwxkitClient(AWXClient):
                 description=item.get("description"),
                 job_type=item.get("job_type", "run"),
                 inventory=item.get("inventory"),
-                project=item["project"],
-                playbook=item["playbook"],
+                project=item.get("project"),
+                playbook=item.get("playbook") or "",
                 extra_vars=item.get("extra_vars", {}),
             )
             for item in results
@@ -148,8 +148,8 @@ class AwxkitClient(AWXClient):
             description=data.get("description"),
             job_type=data.get("job_type", "run"),
             inventory=data.get("inventory"),
-            project=data["project"],
-            playbook=data["playbook"],
+            project=data.get("project"),
+            playbook=data.get("playbook") or "",
             extra_vars=data.get("extra_vars", {}),
         )
 
