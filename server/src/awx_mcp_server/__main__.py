@@ -7,7 +7,7 @@ import asyncio
 import sys
 from awx_mcp_server.mcp_server import main
 
-__version__ = "1.1.6"
+__version__ = "2.0.0"
 
 if __name__ == "__main__":
     # Handle --version flag

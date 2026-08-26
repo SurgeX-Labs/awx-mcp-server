@@ -95,9 +95,14 @@ class JobTemplate(BaseModel):
     name: str
     description: Optional[str] = None
     job_type: str
+    # inventory, project and playbook are all optional in AWX itself: a template can
+    # be saved without them (AWX's stock "Demo Job Template" has project=null and an
+    # empty playbook), and prompt-on-launch templates legitimately leave them unset.
+    # Typing any of them as required makes a single such template poison an entire
+    # list_job_templates call with a pydantic validation error.
     inventory: Optional[int] = None
-    project: int
-    playbook: str
+    project: Optional[int] = None
+    playbook: str = ""
     extra_vars: dict[str, Any] = Field(default_factory=dict)
 
 
